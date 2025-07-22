@@ -6,11 +6,27 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # This is a debug print statement to prove the latest code is running.
-print("--- RUNNING LATEST CODE - v4 ---")
+print("--- RUNNING LATEST CODE - v5 ---")
 
 # --- Basic Flask App Setup ---
 app = Flask(__name__)
-CORS(app)
+
+# Configure CORS specifically for your Netlify domain
+CORS(app, origins=[
+    'https://healthcare-chatbot-website.netlify.app',
+    'http://localhost:3000',  # for local development
+    'http://127.0.0.1:3000',  # alternative localhost
+    'http://localhost:5000',  # if testing locally
+], methods=['GET', 'POST', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization'])
+
+# Add manual CORS headers as backup
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'https://healthcare-chatbot-website.netlify.app')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # --- GLOBAL CONFIGURATION ---
 # Securely get the API key from an environment variable on Render
@@ -198,9 +214,14 @@ QUESTION:
         print(f"ERROR in get_chatbot_response: {str(e)}")
         return f"Sorry, I encountered an error processing your request: {str(e)}"
 
-# --- API Endpoint ---
-@app.route('/chat', methods=['POST'])
+# --- API Endpoints ---
+@app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'OK'})
+        return response
+    
     if not database_ready:
         return jsonify({"error": "Database not ready. Please check server logs."}), 500
         
@@ -217,9 +238,15 @@ def health_check():
     status = {
         "database_ready": database_ready,
         "collection_exists": collection is not None,
-        "document_count": collection.count() if collection else 0
+        "document_count": collection.count() if collection else 0,
+        "server_status": "running"
     }
     return jsonify(status)
+
+# Add a simple test endpoint
+@app.route('/test', methods=['GET'])
+def test():
+    return jsonify({"message": "Server is working!", "cors": "enabled"})
 
 # --- Run the App ---
 if __name__ == '__main__':
@@ -228,4 +255,6 @@ if __name__ == '__main__':
     else:
         print("⚠️  Server starting but database is NOT ready!")
     
+    print("CORS configured for: https://healthcare-chatbot-website.netlify.app")
     app.run(host='0.0.0.0', port=5000)
+
