@@ -600,6 +600,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch(backendUrl, {
                 method: 'POST', // The POST method is allowed by your Render app
                 headers: { 'Content-Type': 'application/json' },
+                mode: 'cors', // Explicitly set CORS mode
                 body: JSON.stringify({ message: userMessage })
             });
 
