@@ -23,8 +23,8 @@ html_folder_path = '.'
 collection_name = "healthcare_ai_docs"
 
 # --- PERSISTENT DATABASE SETUP ---
-db_path = "/var/data"
-client = chromadb.PersistentClient(path=db_path)
+# db_path = "/var/data"  <-- Comment out or delete this line
+client = chromadb.Client() # <-- Change from PersistentClient to Client
 collection = None
 
 # --- Function to load, chunk, and create the database ---
