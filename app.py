@@ -18,7 +18,7 @@ html_folder_path = 'html_files'
 # --- PERSISTENT DATABASE SETUP ---
 # Use PersistentClient to save the database to disk on Render
 # Render provides a persistent disk at '/var/data'
-db_path = "/var/data/chroma"
+db_path = "/var/data"
 client = chromadb.PersistentClient(path=db_path)
 collection = None  # We will initialize this below
 
