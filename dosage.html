@@ -557,22 +557,25 @@
                 }
             }
 
-            async function callGeminiAPI(userMessage) {
-                const context = getWebsiteContext();
-                const response = await fetch('/.netlify/functions/gemini-chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userMessage,
-                        context: context
-                    })
-                });
+          async function callGeminiAPI(userMessage) {
+    // Use the URL for your backend on Render
+    const backendUrl = 'https://healthcare-chatbot-website.onrender.com/chat';
 
-                if (!response.ok) {
-                    const errorDetails = await response.text();
-                    console.error('API request failed:', response.status, errorDetails);
-                    throw new Error(`API request failed: ${response.status} - ${errorDetails}`);
-                }
+    try {
+        const response = await fetch(backendUrl, {
+            method: 'POST', // The POST method is allowed by your Render app
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: userMessage })
+        });
+
+        const data = await response.json();
+        return data.response;
+
+    } catch (error) {
+        console.error('Error:', error);
+        return "Sorry, there was an error connecting to the server.";
+    }
+}
 
                 const data = await response.json();
                 return data.response;
