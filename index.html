@@ -288,7 +288,7 @@
                         </div>
                         <div>
                             <div class="text-3xl font-bold text-indigo-600">99.9%</div>
-                            <div class="text-gray-600">Safety Record</div>
+                            <div class="text-gray-600">Efficacy</div>
                         </div>
                     </div>
                 </div>
@@ -591,22 +591,27 @@
                 }
             }
 
-            async function callGeminiAPI(userMessage) {
-                const context = getWebsiteContext();
-                const response = await fetch('/.netlify/functions/gemini-chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userMessage,
-                        context: context
-                    })
-                });
+           // Make sure your function looks like this:
 
-                if (!response.ok) {
-                    const errorDetails = await response.text();
-                    console.error('API request failed:', response.status, errorDetails);
-                    throw new Error(`API request failed: ${response.status} - ${errorDetails}`);
-                }
+async function callGeminiAPI(userMessage) {
+    // Use the URL for your backend on Render
+    const backendUrl = 'https://healthcare-chatbot-website.onrender.com/chat';
+
+    try {
+        const response = await fetch(backendUrl, {
+            method: 'POST', // The POST method is allowed by your Render app
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: userMessage })
+        });
+
+        const data = await response.json();
+        return data.response;
+
+    } catch (error) {
+        console.error('Error:', error);
+        return "Sorry, there was an error connecting to the server.";
+    }
+}
 
                 const data = await response.json();
                 return data.response;
