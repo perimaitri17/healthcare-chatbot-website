@@ -1,0 +1,6 @@
+Flask
+Flask-Cors
+google-generativeai
+chromadb
+lxml
+gunicorn

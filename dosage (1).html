@@ -1,0 +1,805 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediCare Plus - Dosage</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Shared styles for chat and navigation */
+        .chat-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .chat-widget {
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+        .chat-input-area {
+            padding: 15px;
+            border-top: 1px solid #e5e7eb;
+            background: white;
+        }
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .message.user {
+            flex-direction: row-reverse;
+        }
+        .message-content {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+        }
+        .message.ai .message-content {
+            background: white;
+            border: 1px solid #e5e7eb;
+            color: #374151;
+        }
+               /* Enhanced styling for ALL links in AI messages */
+        .message.ai .message-content a {
+            color: #667eea;
+            text-decoration: underline;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            word-break: break-all;
+            display: inline-block;
+            margin: 2px 4px 2px 0;
+            padding: 4px 8px;
+            background-color: rgba(102, 126, 234, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        .message.ai .message-content a:hover {
+            color: #764ba2;
+            background-color: rgba(118, 75, 162, 0.15);
+            border-color: rgba(118, 75, 162, 0.3);
+            transform: translateY(-1px);
+        }
+         /* Special styling for internal page links */
+        .message.ai .message-content a.internal-link {
+            background-color: rgba(34, 197, 94, 0.1);
+            color: #16a34a;
+            border-color: rgba(34, 197, 94, 0.2);
+        }
+        .message.ai .message-content a.internal-link:hover {
+            background-color: rgba(34, 197, 94, 0.15);
+            border-color: rgba(34, 197, 94, 0.3);
+            color: #15803d;
+        }
+
+        /* Style for external URL links with full URL display */
+        .message.ai .message-content a.external-link {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background-color: #f8fafc;
+            color: #1e40af;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin: 4px 0;
+            display: inline-block;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .message.ai .message-content a.external-link:hover {
+            background-color: #f1f5f9;
+            border-color: #1e40af;
+            color: #1d4ed8;
+        }
+
+        /* Style for downloadable content links */
+        .message.ai .message-content a.download-link {
+            background-color: rgba(245, 101, 101, 0.1);
+            color: #dc2626;
+            border-color: rgba(245, 101, 101, 0.2);
+        }
+        .message.ai .message-content a.download-link:hover {
+            background-color: rgba(245, 101, 101, 0.15);
+            border-color: rgba(245, 101, 101, 0.3);
+            color: #b91c1c;
+        }
+       
+        .chat-toggle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            transition: transform 0.3s ease;
+        }
+        .chat-toggle:hover {
+            transform: scale(1.05);
+        }
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            padding: 10px 15px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 15px;
+            max-width: 80px;
+        }
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        /* Page specific styles - only for active page */
+        .page-section {
+            display: block; /* All sections are always visible on their own page */
+        }
+        .nav-link {
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link.active {
+            border-bottom: 2px solid #667eea;
+            color: #667eea;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        /* Logo clickable styling */
+        .logo-link {
+            display: flex;
+            align-items: center;
+            space-x: 2;
+            text-decoration: none;
+            color: inherit;
+            transition: opacity 0.3s ease;
+        }
+        .logo-link:hover {
+            opacity: 0.8;
+        }
+        /* Chat header button hover effects */
+        .chat-header button:hover i {
+            transform: scale(1.1);
+            transition: transform 0.2s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center py-4">
+                 <!-- Made logo clickable -->
+                <a href="index.html" class="logo-link">
+                    <i class="fas fa-heartbeat text-2xl text-indigo-600"></i>
+                    <span class="text-xl font-bold text-gray-800 ml-2">MediCare Plus</span>
+                </a>
+                <div class="flex space-x-6">
+                    <!-- Updated href attributes to point to new HTML files -->
+                    <a href="index.html" class="nav-link text-gray-700 hover:text-indigo-600 font-medium" data-page="home">Home</a>
+                    <a href="safety.html" class="nav-link text-gray-700 hover:text-indigo-600 font-medium" data-page="safety">Safety</a>
+                    <a href="dosage.html" class="nav-link text-gray-700 hover:text-indigo-600 font-medium" data-page="dosage">Dosage</a>
+                    <a href="contact.html" class="nav-link text-gray-700 hover:text-indigo-600 font-medium" data-page="contact">Contact</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content for Dosage Page -->
+    <main class="min-h-screen">
+        <section id="dosage-content" class="page-section">
+            <div class="max-w-7xl mx-auto px-4 py-12">
+                <h1 class="text-4xl font-bold text-gray-800 mb-8">Medication Dosage Information</h1>
+                
+                <div class="grid lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2">
+                        <h2 class="text-2xl font-semibold text-indigo-600 mb-6">Common Medications</h2>
+                        
+                        <div class="space-y-6">
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <h3 class="font-semibold text-lg mb-4 text-gray-800">Acetaminophen (Tylenol)</h3>
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Adult Dosage:</p>
+                                        <p class="font-medium">325-650mg every 4-6 hours</p>
+                                        <p class="text-sm text-gray-600 mt-1">Maximum: 3000mg/24 hours</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Pediatric Dosage:</p>
+                                        <p class="font-medium">10-15mg/kg every 4-6 hours</p>
+                                        <p class="text-sm text-gray-600 mt-1">Consult pediatrician for children under 2</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <h3 class="font-semibold text-lg mb-4 text-gray-800">Ibuprofen (Advil/Motrin)</h3>
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Adult Dosage:</p>
+                                        <p class="font-medium">200-400mg every 4-6 hours</p>
+                                        <p class="text-sm text-gray-600 mt-1">Maximum: 1200mg/24 hours</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Pediatric Dosage:</p>
+                                        <p class="font-medium">5-10mg/kg every 6-8 hours</p>
+                                        <p class="text-sm text-gray-600 mt-1">Not for children under 6 months</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <h3 class="font-semibold text-lg mb-4 text-gray-800">Amoxicillin (Antibiotic)</h3>
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Adult Dosage:</p>
+                                        <p class="font-medium">250-500mg every 8 hours</p>
+                                        <p class="text-sm text-gray-600 mt-1">Complete full course as prescribed</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm text-gray-600 mb-2">Pediatric Dosage:</p>
+                                        <p class="font-medium">20-40mg/kg/day divided</p>
+                                        <p class="text-sm text-gray-600 mt-1">Prescription required</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h2 class="text-2xl font-semibold text-indigo-600 mb-6">Dosage Calculator</h2>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Patient Weight (kg)</label>
+                                    <input type="number" id="weight" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Medication</label>
+                                    <select id="medication" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                        <option value="">Select medication</option>
+                                        <option value="acetaminophen">Acetaminophen</option>
+                                        <option value="ibuprofen">Ibuprofen</option>
+                                        <option value="amoxicillin">Amoxicillin</option>
+                                    </select>
+                                </div>
+                                <button onclick="calculateDosage()" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition duration-300">Calculate Dosage</button>
+                                <div id="dosageResult" class="mt-4 p-3 bg-gray-50 rounded-md hidden">
+                                    <p class="text-sm font-medium text-gray-800">Recommended Dosage:</p>
+                                    <p id="dosageValue" class="text-lg font-semibold text-indigo-600"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 bg-yellow-50 p-4 rounded-lg border-l-4 border-yellow-400">
+                            <p class="text-sm text-yellow-800">
+                                <strong>Disclaimer:</strong> This calculator provides general guidelines only. Always consult with a healthcare professional for accurate dosing.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+  <!-- AI Chatbot -->
+    <div class="chat-container">
+        <div class="chat-widget" id="chatWidget">
+            <div class="chat-header">
+                <div>
+                    <h3 class="font-semibold">MediCare AI Assistant</h3>
+                    <p class="text-sm opacity-90">Healthcare Support</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <!-- Delete chat history button -->
+                    <button onclick="clearChatHistory()" class="text-white hover:text-red-300 transition duration-200" title="Clear Chat History">
+                        <i class="fas fa-trash-alt text-sm"></i>
+                    </button>
+                    <!-- Close button -->
+                    <button onclick="toggleChat()" class="text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <!-- Chat messages will be loaded here by JavaScript -->
+            </div>
+            
+            <div class="typing-indicator message ai" id="typingIndicator">
+                <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+           
+            <div class="chat-input-area">
+                <div class="flex space-x-2">
+                    <input type="text" id="chatInput" placeholder="Ask me about healthcare..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                    <button onclick="sendMessage()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-300">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                    <!-- Updated onclick to navigate to new pages -->
+                    <button onclick="window.location.href='safety.html'" class="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 transition duration-300">Safety Tips</button>
+                    <button onclick="window.location.href='dosage.html'" class="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 transition duration-300">Dosage Help</button>
+                    <button onclick="window.location.href='contact.html'" class="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 transition duration-300">Contact Us</button>
+                </div>
+            </div>
+        </div>
+       
+        <button class="chat-toggle" onclick="(() => toggleChat())()" id="chatToggle">
+            <i class="fas fa-comments"></i>
+        </button>
+    </div>
+
+    <script>
+        // Define a constant for the localStorage key
+        const CHAT_HISTORY_KEY = 'medicarePlusChatHistory';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get current domain for internal link detection
+            const currentDomain = window.location.origin;
+            const currentHost = window.location.hostname;
+            
+            // Highlight the active navigation link based on the current page
+            const currentPage = window.location.pathname.split('/').pop(); // e.g., "dosage.html"
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if (link.getAttribute('href') === currentPage || (currentPage === '' && link.getAttribute('href') === 'dosage.html')) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+
+            // --- Chat History Management ---
+            let chatHistory = []; // Array to store message objects {sender: 'user'/'ai', text: 'message'}
+
+            function saveChatHistory() {
+                try {
+                    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory));
+                    console.log('Chat History Saved:', chatHistory.length, 'messages');
+                } catch (e) {
+                    console.error('Error saving chat history to localStorage:', e);
+                }
+            }
+
+            function loadChatHistory() {
+                const messagesContainer = document.getElementById('chatMessages');
+                // Ensure messagesContainer exists before clearing its content
+                if (messagesContainer) {
+                    messagesContainer.innerHTML = ''; // Clear existing messages before loading
+                } else {
+                    console.error('Chat messages container not found!');
+                    return; // Exit if container is missing
+                }
+
+                try {
+                    // Load saved chat history from localStorage
+                    const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY);
+                    
+                    if (savedHistory) {
+                        chatHistory = JSON.parse(savedHistory);
+                        console.log('Loaded chat history:', chatHistory.length, 'messages');
+                        
+                        // Display all saved messages
+                        chatHistory.forEach(msg => {
+                            addMessage(msg.text, msg.sender, false); // false = don't save again
+                        });
+                        
+                        // If there are saved messages, don't add welcome message
+                        if (chatHistory.length > 0) {
+                            return;
+                        }
+                    }
+                    
+                    // Only add welcome message if no history exists
+                    addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
+                    
+                } catch (e) {
+                    console.error('Error loading chat history:', e);
+                    // Fallback: Add initial AI message if loading fails
+                    addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
+                }
+            }
+            // --- End Chat History Management ---
+
+            // Function to clear chat history
+            window.clearChatHistory = function() {
+                if (confirm('Are you sure you want to delete all chat history? This action cannot be undone.')) {
+                    // Clear the chat history array
+                    chatHistory = [];
+                    
+                    // Clear the messages container
+                    const messagesContainer = document.getElementById('chatMessages');
+                    if (messagesContainer) {
+                        messagesContainer.innerHTML = '';
+                    }
+                    
+                    // Remove from localStorage
+                    try {
+                        localStorage.removeItem(CHAT_HISTORY_KEY);
+                    } catch (e) {
+                        console.error('Error clearing localStorage:', e);
+                    }
+                    
+                    // Add welcome message back
+                    addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
+                    
+                    console.log('Chat history cleared successfully');
+                }
+            }
+
+            // Function to open chatbot (for AI Assistant card)
+            window.openChatbot = function() {
+                const widget = document.getElementById('chatWidget');
+                const toggle = document.getElementById('chatToggle');
+                
+                if (widget) {
+                    widget.style.display = 'flex';
+                    if (toggle) toggle.style.display = 'none';
+                } else {
+                    console.error('Chat widget element not found!');
+                }
+            }
+
+            // Chatbot functionality
+            window.toggleChat = function() {
+                const widget = document.getElementById('chatWidget');
+                const toggle = document.getElementById('chatToggle');
+               
+                if (widget) { // Null check for chatWidget
+                    if (widget.style.display === 'none' || widget.style.display === '') {
+                        widget.style.display = 'flex';
+                        if (toggle) toggle.style.display = 'none'; // Only hide toggle if it exists
+                    } else {
+                        widget.style.display = 'none';
+                        if (toggle) toggle.style.display = 'flex'; // Only show toggle if it exists
+                    }
+                } else {
+                    console.error('Chat widget element not found!');
+                }
+            }
+
+            window.sendMessage = async function() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+               
+                if (!input) { // Null check for chatInput
+                    console.error('Chat input element not found!');
+                    return;
+                }
+                if (!message) return;
+               
+                addMessage(message, 'user', true); // Save user message
+                input.value = '';
+               
+                showTypingIndicator();
+               
+                try {
+                    const response = await callGeminiAPI(message);
+                    hideTypingIndicator();
+                    addMessage(response, 'ai', true); // Save AI response
+                   
+                    // NEW: Check if the response contains navigation instructions and redirect if needed
+                    checkForNavigation(response);
+                } catch (error) {
+                    hideTypingIndicator();
+                    addMessage('I apologize, but I\'m having trouble connecting right now. Please try again later or contact our support team at +91 11 2345 6789.', 'ai', true); // Save error message
+                    console.error('Error:', error);
+                }
+            }
+
+            // NEW: Function to check for navigation commands and redirect
+            function checkForNavigation(response) {
+                const navigationCommands = {
+                    'NAVIGATE_TO_HOME': 'index.html',
+                    'NAVIGATE_TO_SAFETY': 'safety.html',
+                    'NAVIGATE_TO_DOSAGE': 'dosage.html',
+                    'NAVIGATE_TO_CONTACT': 'contact.html'
+                };
+
+                for (const [command, url] of Object.entries(navigationCommands)) {
+                    if (response.includes(command)) {
+                        setTimeout(() => {
+                            window.location.href = url;
+                        }, 2000); // 2-second delay to let user see the message
+                        break;
+                    }
+                }
+            }
+
+            async function callGeminiAPI(userMessage) {
+                const context = getWebsiteContext();
+                const response = await fetch('/.netlify/functions/gemini-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: userMessage,
+                        context: context
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorDetails = await response.text();
+                    console.error('API request failed:', response.status, errorDetails);
+                    throw new Error(`API request failed: ${response.status} - ${errorDetails}`);
+                }
+
+                const data = await response.json();
+                return data.response;
+            }
+
+            // Enhanced addMessage function to handle URL formatting with better link detection
+            function addMessage(message, sender, saveToHistory = true) {
+                const messagesContainer = document.getElementById('chatMessages');
+                // Ensure messagesContainer exists before adding messages
+                if (!messagesContainer) {
+                    console.error('Chat messages container not found when trying to add message!');
+                    return;
+                }
+
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+               
+                const avatar = document.createElement('div');
+                avatar.className = 'w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm';
+                avatar.innerHTML = sender === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
+               
+                const content = document.createElement('div');
+                content.className = 'message-content';
+               
+                // For AI messages, process URLs and use innerHTML to render clickable links
+                if (sender === 'ai') {
+                    const processedMessage = processLinksInMessage(message);
+                    content.innerHTML = processedMessage;
+                } else {
+                    content.textContent = message;
+                }
+               
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(content);
+                messagesContainer.appendChild(messageDiv);
+               
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                // Save to history and localStorage
+                if (saveToHistory) {
+                    chatHistory.push({ sender: sender, text: message });
+                    saveChatHistory();
+                }
+            }
+
+            // IMPROVED function to process all types of links in messages
+            function processLinksInMessage(message) {
+                let processedMessage = message;
+                
+                // Step 1: Preserve existing HTML links and improve them with proper classes
+                processedMessage = processedMessage.replace(/<a\s+([^>]*?)href=['"]([^'"]*?)['"]([^>]*?)>(.*?)<\/a>/gi, (match, beforeHref, url, afterHref, linkText) => {
+                    // Determine link type and add appropriate class
+                    let linkClass = '';
+                    
+                    if (url.includes('.html') || url.startsWith('#') || (!url.includes('http') && !url.includes('://'))) {
+                        // Internal links
+                        linkClass = 'internal-link';
+                        // For internal links, show the full URL if it's not a simple filename
+                        if (url.includes('.html') && !linkText.includes(currentDomain)) {
+                            linkText = `${linkText} (${currentDomain}/${url})`;
+                        }
+                    } else if (url.includes('.pdf') || url.includes('.doc') || url.includes('.xls') || url.includes('download')) {
+                        // Download links
+                        linkClass = 'download-link';
+                        // Show full URL for download links
+                        if (linkText !== url) {
+                            linkText = `${linkText} (${url})`;
+                        }
+                    } else {
+                        // External links
+                        linkClass = 'external-link';
+                        // Show full URL for external links
+                        if (linkText !== url) {
+                            linkText = `${linkText} (${url})`;
+                        }
+                    }
+                    
+                    return `<a ${beforeHref}href="${url}" class="${linkClass}" ${afterHref} target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+                });
+                
+                // Step 2: Convert standalone URLs that aren't already in HTML tags
+                const urlRegex = /(?<!href=['"])(https?:\/\/[^\s<>"']+)/gi;
+                
+                processedMessage = processedMessage.replace(urlRegex, (url) => {
+                    // Check if this URL is already inside an HTML tag
+                    const beforeUrl = processedMessage.substring(0, processedMessage.indexOf(url));
+                    const lastOpenTag = beforeUrl.lastIndexOf('<');
+                    const lastCloseTag = beforeUrl.lastIndexOf('>');
+                    
+                    // If we're inside an HTML tag, don't convert
+                    if (lastOpenTag > lastCloseTag) {
+                        return url;
+                    }
+                    
+                    // Determine link type for standalone URLs
+                    let linkClass = 'external-link';
+                    if (url.includes('.pdf') || url.includes('.doc') || url.includes('.xls') || url.includes('download')) {
+                        linkClass = 'download-link';
+                    }
+                    
+                    // Convert standalone URLs to clickable links with full URL display
+                    return `<a href="${url}" class="${linkClass}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+                });
+
+                // Step 3: Convert internal page references to proper links
+                const internalPageRegex = /\b(Safety Page|Dosage Page|Contact Page|Home Page)\b/gi;
+                processedMessage = processedMessage.replace(internalPageRegex, (match) => {
+                    const pageMap = {
+                        'Safety Page': 'safety.html',
+                        'Dosage Page': 'dosage.html',
+                        'Contact Page': 'contact.html',
+                        'Home Page': 'index.html'
+                    };
+                    
+                    const fileName = pageMap[match];
+                    if (fileName) {
+                        const fullUrl = `${currentDomain}/${fileName}`;
+                        return `<a href="${fileName}" class="internal-link">${match} (${fullUrl})</a>`;
+                    }
+                    return match;
+                });
+                
+                return processedMessage;
+            }
+
+            function showTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.style.display = 'flex';
+                } else {
+                    console.error('Typing indicator element not found!');
+                }
+                const messagesContainer = document.getElementById('chatMessages');
+                if (messagesContainer) {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+
+            function hideTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.style.display = 'none';
+                } else {
+                    console.error('Typing indicator element not found!');
+                }
+            }
+
+            function getWebsiteContext() {
+                // UPDATED: Enhanced context with better search patterns and link formatting
+                return `
+                You are MediCare Plus AI Assistant, a healthcare chatbot for our website.
+                Current website domain: ${currentDomain}
+                
+                The website has the following main pages:
+                - Home: index.html (Overview, services, about us)
+                - Safety: safety.html (Medication storage, administration safety, allergy management, infection control, emergency procedures, safety checklists)
+                - Dosage: dosage.html (Medication dosage calculators for Acetaminophen, Ibuprofen, Amoxicillin, dosing guidelines)
+                - Contact: contact.html (Contact form, address: 123 Healthcare Street, New Delhi 110001, phone: +91 11 2345 6789, email: info@medicareplus.com, hours, social media)
+
+                ENHANCED SEARCH INTELLIGENCE - Match user queries to appropriate content:
+                
+                For SAFETY-related queries, keywords, or requests:
+                - "safety", "guidelines", "medication safety", "storage", "administration", "allergy", "infection control", "emergency", "procedures", "protocols"
+                - Always provide comprehensive safety information AND suggest the Safety Page
+                
+                For DOSAGE-related queries:
+                - "dosage", "dose", "calculator", "how much", "medication amount", "acetaminophen", "ibuprofen", "amoxicillin", "dosing"
+                - Always provide dosage guidance AND suggest the Dosage Page with calculator
+                
+                For CONTACT-related queries:
+                - "contact", "phone", "email", "address", "location", "hours", "reach", "support"
+                - Always provide contact information AND suggest the Contact Page
+                
+                LINK FORMATTING RULES (CRITICAL - Follow exactly):
+                
+                1. For internal website navigation, format as:
+                   <a href='safety.html'>Safety Page</a>
+                   <a href='dosage.html'>Dosage Page</a>
+                   <a href='contact.html'>Contact Page</a>
+                   <a href='index.html'>Home Page</a>
+                   
+                2. For external links, ALWAYS provide the complete URL as plain text:
+                   https://www.cdc.gov/medicationsafety/
+                   https://www.fda.gov/drugs/information-consumers-and-patients-drugs/
+                   
+                3. For downloadable content, include the full URL:
+                   https://www.who.int/publications/medication-safety-guidelines.pdf
+
+                4. INTELLIGENT RESPONSE FORMAT:
+                   When user asks about safety checklists:
+                   A printable checklist to help you ensure safe medication storage and administration at home with below URL.
+                   https://www.ets.org/s/gre/pdf/gre_info_test_centers.pdf
+
+                5. REDIRECT FEATURE: Only use these when user explicitly asks to GO TO or BE TAKEN TO a page:
+                   - For Home: Include "NAVIGATE_TO_HOME" 
+                   - For Safety: Include "NAVIGATE_TO_SAFETY"
+                   - For Dosage: Include "NAVIGATE_TO_DOSAGE" 
+                   - For Contact: Include "NAVIGATE_TO_CONTACT"
+
+                RESPONSE GUIDELINES:
+                - Always provide helpful content first, then suggest relevant pages
+                - Match user intent intelligently (safety queries → safety content + Safety Page)
+                - Include both internal pages and external authoritative sources when relevant
+                - Show full URLs for external resources to build trust
+                - Be conversational but professional
+                - Always emphasize consulting healthcare professionals for personalized advice
+                - For emergency situations, always direct to emergency services first
+
+                Remember: The JavaScript will automatically format all links to show full URLs, so focus on providing the right content and appropriate link references.
+                `;
+            }
+
+            // Enter key support for chat
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) { // Added null check
+                chatInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        sendMessage();
+                    }
+                });
+            } else {
+                console.error("Chat input element not found, cannot attach keypress listener!");
+            }
+
+            // Load chat history when the page loads
+            loadChatHistory();
+        });
+    </script>
+</body>
+</html>
