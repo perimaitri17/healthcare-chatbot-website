@@ -591,27 +591,35 @@
                 }
             }
 
-            async function callGeminiAPI(userMessage) {
-                const context = getWebsiteContext();
-                const response = await fetch('/.netlify/functions/gemini-chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userMessage,
-                        context: context
-                    })
-                });
+          // --- REPLACE IT WITH THIS NEW CODE ---
+async function callGeminiAPI(userMessage) {
+    // 1. IMPORTANT: Paste the public URL from your deployed Render backend here
+    const backendUrl = 'https://healthcare-chatbot-website.onrender.com';
 
-                if (!response.ok) {
-                    const errorDetails = await response.text();
-                    console.error('API request failed:', response.status, errorDetails);
-                    throw new Error(`API request failed: ${response.status} - ${errorDetails}`);
-                }
+    try {
+        // 2. The fetch call now uses your backendUrl
+        const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // 3. We only need to send the message. Your Python backend handles the context now!
+            body: JSON.stringify({ message: userMessage })
+        });
 
-                const data = await response.json();
-                return data.response;
-            }
+        if (!response.ok) {
+            const errorDetails = await response.text();
+            console.error('API request failed:', response.status, errorDetails);
+            throw new Error(`API request failed: ${response.status} - ${errorDetails}`);
+        }
 
+        const data = await response.json();
+        return data.response; // Get the response from your Python/Gemini backend
+
+    } catch (error) {
+        console.error('API connection error:', error);
+        // Return a user-friendly error message if the backend can't be reached
+        throw new Error('Could not connect to the AI server.');
+    }
+}
             // Enhanced addMessage function to handle URL formatting with better link detection
             function addMessage(message, sender, saveToHistory = true) {
                 const messagesContainer = document.getElementById('chatMessages');
