@@ -10,14 +10,20 @@ app = Flask(__name__)
 CORS(app)
 
 # --- GLOBAL CONFIGURATION ---
-genai.configure(api_key="AIzaSyBDBs9WhF46leK7tDfZA_UqznXjr-c0_Kg")
+# 1. Securely get the API key from an environment variable
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    # This will cause the app to fail on startup if the key isn't set
+    raise ValueError("GEMINI_API_KEY environment variable not set!")
+genai.configure(api_key=api_key)
+
 embedding_model = 'models/embedding-001'
 chat_model = genai.GenerativeModel('gemini-1.5-pro-latest')
 html_folder_path = 'html_files'
+collection_name = "healthcare_ai_docs"
 
 # --- PERSISTENT DATABASE SETUP ---
-# Use PersistentClient to save the database to disk on Render
-# Render provides a persistent disk at '/var/data'
+# 2. Use a persistent path that is writable on Render
 db_path = "/var/data"
 client = chromadb.PersistentClient(path=db_path)
 collection = None  # We will initialize this below
@@ -27,9 +33,13 @@ def initialize_database():
     global collection
     print("Initializing new database...")
 
-    # 1. Load and Chunk Data from HTML files
+    # Load and Chunk Data from HTML files
     all_text_chunks = []
     print(f"Reading HTML files from: {html_folder_path}")
+    if not os.path.isdir(html_folder_path):
+        print(f"Error: Directory not found at '{html_folder_path}'")
+        return
+
     for filename in os.listdir(html_folder_path):
         if filename.endswith(".html"):
             file_path = os.path.join(html_folder_path, filename)
@@ -40,13 +50,17 @@ def initialize_database():
                 all_text_chunks.extend(chunks)
     print(f"Found {len(all_text_chunks)} total text chunks.")
 
-    # 2. Generate Embeddings
+    if not all_text_chunks:
+        print("No text chunks found to add to the database.")
+        return
+
+    # Generate Embeddings
     print("Generating embeddings with Gemini AI...")
     response = genai.embed_content(model=embedding_model, content=all_text_chunks, task_type="retrieval_document")
     embeddings = response['embedding']
 
-    # 3. Create and populate the collection
-    collection = client.create_collection("healthcare_ai_docs")
+    # Create and populate the collection
+    collection = client.create_collection(collection_name)
     collection.add(
         ids=[f"doc_{i}" for i in range(len(all_text_chunks))],
         embeddings=embeddings,
@@ -55,13 +69,14 @@ def initialize_database():
     print("✅ New database initialized and stored successfully!")
 
 # --- Check for Database on Startup ---
+# 3. This self-healing logic creates the DB if it doesn't exist
 try:
     # Try to get the existing collection
-    collection = client.get_collection("healthcare_ai_docs")
+    collection = client.get_collection(collection_name)
     print("✅ Connected to existing database.")
 except ValueError:
     # If it doesn't exist, the above line will throw a ValueError
-    print("Database not found. Starting a new one...")
+    print(f"Database collection '{collection_name}' not found. Starting a new one...")
     initialize_database()
 
 
@@ -70,6 +85,7 @@ def get_chatbot_response(user_query):
     query_embedding = genai.embed_content(model=embedding_model, content=user_query, task_type="retrieval_query")['embedding']
     results = collection.query(query_embeddings=[query_embedding], n_results=3)
     retrieved_context = "\n\n".join(results['documents'][0])
+
     prompt = f"""
     You are a helpful AI assistant. Answer the user's question based ONLY on the following context.
     If the context doesn't contain the answer, say "I do not have enough information to answer that."
@@ -90,6 +106,9 @@ def chat():
     user_message = request.json.get('message')
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
+    if not collection:
+        return jsonify({"error": "Database not initialized"}), 503
+
     bot_response = get_chatbot_response(user_message)
     return jsonify({"response": bot_response})
 
