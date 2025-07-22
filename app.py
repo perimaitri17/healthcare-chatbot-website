@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # This is a debug print statement to prove the latest code is running.
-print("--- RUNNING LATEST CODE - v3 ---")
+print("--- RUNNING LATEST CODE - v4 ---")
 
 # --- Basic Flask App Setup ---
 app = Flask(__name__)
@@ -26,8 +26,34 @@ html_folder_path = '.'
 collection_name = "healthcare_ai_docs"
 
 # --- PERSISTENT DATABASE SETUP ---
-# Path for Render's persistent disk
-db_path = "/var/data"
+# Try multiple possible paths for Render's persistent disk
+possible_paths = [
+    os.getenv("RENDER_DATA_PATH", "/opt/render/project/src/data"),  # Render-specific
+    "./data",  # Relative path in project
+    "/tmp/chromadb_data",  # Temporary fallback
+    "."  # Current directory as last resort
+]
+
+db_path = None
+for path in possible_paths:
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs(path, exist_ok=True)
+        # Test write permissions
+        test_file = os.path.join(path, "test_write.txt")
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+        db_path = path
+        print(f"✅ Using database path: {db_path}")
+        break
+    except Exception as e:
+        print(f"❌ Cannot use path {path}: {str(e)}")
+        continue
+
+if not db_path:
+    raise RuntimeError("No writable path found for ChromaDB database!")
+
 client = chromadb.PersistentClient(path=db_path)
 collection = None
 
