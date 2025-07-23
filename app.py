@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # This is a debug print statement to prove the latest code is running.
-print("--- RUNNING LATEST CODE - v5 ---")
+print("--- RUNNING LATEST CODE - GCP Cloud Run v1 ---")
 
 # --- Basic Flask App Setup ---
 app = Flask(__name__)
@@ -29,25 +29,48 @@ def after_request(response):
     return response
 
 # --- GLOBAL CONFIGURATION ---
-# Securely get the API key from an environment variable on Render
+# Securely get the API key from environment variable
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     raise ValueError("GEMINI_API_KEY environment variable not set!")
 genai.configure(api_key=api_key)
 
 embedding_model = 'models/embedding-001'
-chat_model = genai.GenerativeModel('gemini-1.5-pro-latest')
+# CHANGED: Use gemini-1.5-flash for higher quotas
+chat_model = genai.GenerativeModel('gemini-1.5-flash')
 # The script will look for .html files in the main root directory
 html_folder_path = '.'
 collection_name = "healthcare_ai_docs"
 
-# --- PERSISTENT DATABASE SETUP ---
-# Try multiple possible paths for Render's persistent disk
+# --- RATE LIMITING ---
+import time
+from collections import defaultdict
+
+# Simple in-memory rate limiting
+request_counts = defaultdict(list)
+MAX_REQUESTS_PER_MINUTE = 10
+
+def check_rate_limit(user_id="anonymous"):
+    """Check if user has exceeded rate limit"""
+    now = time.time()
+    user_requests = request_counts[user_id]
+    
+    # Remove requests older than 1 minute
+    user_requests[:] = [req_time for req_time in user_requests if now - req_time < 60]
+    
+    if len(user_requests) >= MAX_REQUESTS_PER_MINUTE:
+        return False
+    
+    user_requests.append(now)
+    return True
+
+# --- PERSISTENT DATABASE SETUP FOR GOOGLE CLOUD RUN ---
+# Cloud Run has ephemeral filesystem, but we can use /tmp for temporary storage
+# For production, you should use Google Cloud Storage or Firestore
 possible_paths = [
-    os.getenv("RENDER_DATA_PATH", "/opt/render/project/src/data"),  # Render-specific
-    "./data",  # Relative path in project
-    "/tmp/chromadb_data",  # Temporary fallback
-    "."  # Current directory as last resort
+    "/tmp/chromadb_data",  # Cloud Run writable temporary directory
+    "./data",  # Local development
+    "."  # Current directory as fallback
 ]
 
 db_path = None
@@ -121,13 +144,31 @@ def initialize_database():
 
     try:
         print("Generating embeddings with Gemini AI...")
-        response = genai.embed_content(
-            model=embedding_model, 
-            content=all_text_chunks, 
-            task_type="retrieval_document"
-        )
-        embeddings = response['embedding']
-        print(f"Generated {len(embeddings)} embeddings")
+        
+        # Process embeddings in smaller batches to avoid quota issues
+        batch_size = 10
+        all_embeddings = []
+        
+        for i in range(0, len(all_text_chunks), batch_size):
+            batch = all_text_chunks[i:i+batch_size]
+            print(f"Processing batch {i//batch_size + 1}/{(len(all_text_chunks)-1)//batch_size + 1}")
+            
+            try:
+                response = genai.embed_content(
+                    model=embedding_model, 
+                    content=batch, 
+                    task_type="retrieval_document"
+                )
+                all_embeddings.extend(response['embedding'])
+                # Small delay to avoid rate limiting
+                time.sleep(0.1)
+            except Exception as e:
+                if "429" in str(e) or "quota" in str(e).lower():
+                    print(f"Quota exceeded during embedding generation: {str(e)}")
+                    return False
+                raise e
+        
+        print(f"Generated {len(all_embeddings)} embeddings")
 
         # Delete existing collection if it exists
         try:
@@ -141,7 +182,7 @@ def initialize_database():
         collection = client.create_collection(collection_name)
         collection.add(
             ids=[f"doc_{i}" for i in range(len(all_text_chunks))],
-            embeddings=embeddings,
+            embeddings=all_embeddings,
             documents=all_text_chunks
         )
         
@@ -152,6 +193,8 @@ def initialize_database():
         
     except Exception as e:
         print(f"ERROR during database initialization: {str(e)}")
+        if "429" in str(e) or "quota" in str(e).lower():
+            print("This appears to be a quota/rate limit issue.")
         return False
 
 # --- Check for Database on Startup ---
@@ -198,8 +241,9 @@ def get_chatbot_response(user_query):
         retrieved_context = "\n\n".join(results['documents'][0])
 
         prompt = f"""
-You are a helpful AI assistant. Answer the user's question based ONLY on the following context.
+You are a helpful healthcare AI assistant. Answer the user's question based ONLY on the following context.
 If the context doesn't contain the answer, say "I do not have enough information to answer that."
+Always recommend consulting healthcare professionals for medical advice.
 
 CONTEXT:
 {retrieved_context}
@@ -212,7 +256,9 @@ QUESTION:
         
     except Exception as e:
         print(f"ERROR in get_chatbot_response: {str(e)}")
-        return f"Sorry, I encountered an error processing your request: {str(e)}"
+        if "429" in str(e) or "quota" in str(e).lower():
+            return "I'm currently experiencing high usage. Please try again in a few minutes."
+        return f"Sorry, I encountered an error processing your request. Please try again."
 
 # --- API Endpoints ---
 @app.route('/chat', methods=['POST', 'OPTIONS'])
@@ -222,15 +268,40 @@ def chat():
         response = jsonify({'status': 'OK'})
         return response
     
+    # Rate limiting
+    user_id = request.json.get('userId', 'anonymous') if request.json else 'anonymous'
+    if not check_rate_limit(user_id):
+        return jsonify({
+            "error": "Too many requests. Please wait a minute before sending another message.",
+            "retryAfter": 60
+        }), 429
+    
     if not database_ready:
         return jsonify({"error": "Database not ready. Please check server logs."}), 500
         
-    user_message = request.json.get('message')
+    user_message = request.json.get('message') if request.json else None
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
+    
+    # Validate message length    
+    if len(user_message) > 2000:
+        return jsonify({"error": "Message too long. Please keep it under 2000 characters."}), 400
         
-    bot_response = get_chatbot_response(user_message)
-    return jsonify({"response": bot_response})
+    try:
+        bot_response = get_chatbot_response(user_message)
+        return jsonify({
+            "response": bot_response,
+            "model": "gemini-1.5-flash",
+            "timestamp": time.time()
+        })
+    except Exception as e:
+        print(f"Chat endpoint error: {str(e)}")
+        if "429" in str(e) or "quota" in str(e).lower():
+            return jsonify({
+                "error": "I'm currently experiencing high usage. Please try again in a few minutes.",
+                "quotaExceeded": True
+            }), 429
+        return jsonify({"error": "Internal server error"}), 500
 
 # --- Health Check Endpoint ---
 @app.route('/health', methods=['GET'])
@@ -239,14 +310,19 @@ def health_check():
         "database_ready": database_ready,
         "collection_exists": collection is not None,
         "document_count": collection.count() if collection else 0,
-        "server_status": "running"
+        "server_status": "running",
+        "platform": "Google Cloud Run"
     }
     return jsonify(status)
 
 # Add a simple test endpoint
 @app.route('/test', methods=['GET'])
 def test():
-    return jsonify({"message": "Server is working!", "cors": "enabled"})
+    return jsonify({
+        "message": "Server is working!", 
+        "cors": "enabled",
+        "platform": "Google Cloud Run"
+    })
 
 # --- Run the App ---
 if __name__ == '__main__':
@@ -256,5 +332,7 @@ if __name__ == '__main__':
         print("⚠️  Server starting but database is NOT ready!")
     
     print("CORS configured for: https://healthcare-chatbot-website.netlify.app")
-    app.run(host='0.0.0.0', port=5000)
-
+    
+    # CHANGED: Use port from environment variable (Cloud Run requirement)
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
