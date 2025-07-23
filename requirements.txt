@@ -1,6 +1,7 @@
-Flask==2.3.3
-Flask-CORS==4.0.0
-google-generativeai==0.3.2
-chromadb==0.4.15
-beautifulsoup4==4.12.2
-lxml==4.9.3
+Flask
+Flask-Cors
+google-generativeai
+chromadb
+lxml
+gunicorn
+beautifulsoup4
