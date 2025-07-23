@@ -594,8 +594,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // FIXED: Properly define callGeminiAPI function as async
     async function callGeminiAPI(userMessage) {
         // Use the URL for your backend on Render
-        const backendUrl = 'https://healthcare-chatbot-website.onrender.com/chat';
-
+       const backendUrl = 'https://healthcare-chatbot-website-843177386252.europe-west1.run.app/chat';
         try {
             const response = await fetch(backendUrl, {
                 method: 'POST', // The POST method is allowed by your Render app
