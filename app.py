@@ -19,7 +19,7 @@ if not api_key:
 genai.configure(api_key=api_key)
 
 embedding_model = 'models/embedding-001'
-chat_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+chat_model = genai.GenerativeModel('gemini-1.5-flash')
 html_folder_path = '.' # Look for HTML files in the root directory
 collection_name = "healthcare_ai_docs"
 
