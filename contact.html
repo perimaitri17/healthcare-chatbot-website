@@ -548,25 +548,31 @@
                 }
             }
 
-            async function callGeminiAPI(userMessage) {
-    // Use the URL for your backend on Render
-    const backendUrl = 'https://healthcare-chatbot-website.onrender.com/chat';
+          
+    // FIXED: Properly define callGeminiAPI function as async
+    async function callGeminiAPI(userMessage) {
+        // Use the URL for your backend on Render
+       const backendUrl = 'https://healthcare-chatbot-website-843177386252.europe-west1.run.app/chat'; 
+        try {
+            const response = await fetch(backendUrl, {
+                method: 'POST', // The POST method is allowed by your Render app
+                headers: { 'Content-Type': 'application/json' },
+                mode: 'cors', // Explicitly set CORS mode
+                body: JSON.stringify({ message: userMessage })
+            });
 
-    try {
-        const response = await fetch(backendUrl, {
-            method: 'POST', // The POST method is allowed by your Render app
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: userMessage })
-        });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
-        const data = await response.json();
-        return data.response;
+            const data = await response.json();
+            return data.response || "Sorry, I didn't receive a proper response from the server.";
 
-    } catch (error) {
-        console.error('Error:', error);
-        return "Sorry, there was an error connecting to the server.";
+        } catch (error) {
+            console.error('Error calling API:', error);
+            throw error; // Re-throw to be handled by sendMessage
+        }
     }
-}
 
                 const data = await response.json();
                 return data.response;
