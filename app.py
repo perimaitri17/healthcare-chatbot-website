@@ -4,9 +4,8 @@ import google.generativeai as genai
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import re
 
-print("--- GCP Chatbot Service Starting [DIAGNOSTIC VERSION] ---")
+print("--- GCP Chatbot Service Starting [TARGETED FIX] ---")
 
 # --- Basic Flask App Setup ---
 app = Flask(__name__)
@@ -30,283 +29,249 @@ collection = None
 # --- Function to initialize the database ---
 def initialize_database():
     global collection
-    print("=== DIAGNOSTIC: Initializing in-memory vector database ===")
-    
-    # First, let's see what files we have
-    print(f"Looking for HTML files in: {html_folder_path}")
-    all_files = os.listdir(html_folder_path)
-    html_files = [f for f in all_files if f.endswith(".html")]
-    print(f"All files in directory: {all_files}")
-    print(f"HTML files found: {html_files}")
-    
+    print("Reading HTML files from:", html_folder_path)
     all_text_chunks = []
-    metadata_list = []
     
-    for filename in html_files:
-        print(f"\n--- Processing file: {filename} ---")
-        file_path = os.path.join(html_folder_path, filename)
-        
-        try:
+    for filename in os.listdir(html_folder_path):
+        if filename.endswith(".html"):
+            file_path = os.path.join(html_folder_path, filename)
             with open(file_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-                print(f"File size: {len(html_content)} characters")
+                soup = BeautifulSoup(f.read(), 'lxml')
                 
-                soup = BeautifulSoup(html_content, 'lxml')
-                
-                # Extract text content
+                # Extract all text content
                 page_content = soup.get_text(separator='\n', strip=True)
-                print(f"Extracted text length: {len(page_content)} characters")
-                print(f"First 200 chars: {page_content[:200]}...")
                 
-                # Extract links from the HTML
+                # Extract all links
                 links = []
                 for link in soup.find_all('a', href=True):
                     href = link['href']
                     link_text = link.get_text(strip=True)
                     if href and link_text:
-                        links.append(f"{link_text}: {href}")
+                        links.append(f"Link: {link_text} -> {href}")
                 
-                print(f"Links found: {len(links)}")
-                for link in links[:5]:  # Show first 5 links
-                    print(f"  - {link}")
+                # Create larger, more contextual chunks
+                lines = [line.strip() for line in page_content.split('\n') if len(line.strip()) > 15]
                 
-                # Create chunks
-                lines = [line.strip() for line in page_content.split('\n') if len(line.strip()) > 10]
-                print(f"Valid lines found: {len(lines)}")
-                
-                # Group lines into chunks
-                chunk_size = 5  # Larger chunks for better context
-                chunk_count = 0
+                # Group lines into larger chunks (10 lines each)
+                chunk_size = 10
                 for i in range(0, len(lines), chunk_size):
                     chunk_lines = lines[i:i+chunk_size]
                     chunk_text = '\n'.join(chunk_lines)
                     
-                    # Add filename and links context to each chunk
-                    enriched_chunk = f"=== PAGE: {filename} ===\n{chunk_text}"
-                    if links:
-                        enriched_chunk += f"\n\n=== AVAILABLE LINKS ===\n" + '\n'.join(links)
-                    
+                    # Create rich context for each chunk
+                    enriched_chunk = f"""
+PAGE: {filename}
+CONTENT:
+{chunk_text}
+
+AVAILABLE_LINKS:
+{chr(10).join(links) if links else 'No links available'}
+
+KEYWORDS: {filename.replace('.html', '')} healthcare medical safety dosage contact
+"""
                     all_text_chunks.append(enriched_chunk)
-                    metadata_list.append({
-                        'filename': filename,
-                        'chunk_index': len(all_text_chunks) - 1,
-                        'has_links': len(links) > 0
-                    })
-                    chunk_count += 1
-                
-                print(f"Created {chunk_count} chunks for {filename}")
-                
-        except Exception as e:
-            print(f"ERROR processing {filename}: {e}")
     
-    print(f"\n=== TOTAL CHUNKS CREATED: {len(all_text_chunks)} ===")
+    print(f"Found {len(all_text_chunks)} total text chunks.")
     
     if not all_text_chunks:
         print("CRITICAL: No text chunks found.")
         return
 
-    print("Generating embeddings...")
-    try:
-        response = genai.embed_content(model=embedding_model, content=all_text_chunks, task_type="retrieval_document")
-        embeddings = response['embedding']
-        print(f"Embeddings generated: {len(embeddings)} vectors")
-        
-        collection = client.create_collection(collection_name)
-        collection.add(
-            ids=[f"doc_{i}" for i in range(len(all_text_chunks))],
-            embeddings=embeddings,
-            documents=all_text_chunks,
-            metadatas=metadata_list
-        )
-        print(f"✅ Database initialized with {collection.count()} documents!")
-        
-        # Test query to see if data is accessible
-        test_query = "safety"
-        test_embedding = genai.embed_content(model=embedding_model, content=test_query, task_type="retrieval_query")['embedding']
-        test_results = collection.query(query_embeddings=[test_embedding], n_results=3)
-        print(f"\n=== TEST QUERY RESULTS for '{test_query}' ===")
-        if test_results['documents'] and test_results['documents'][0]:
-            for i, doc in enumerate(test_results['documents'][0]):
-                print(f"Result {i+1}: {doc[:200]}...")
-        else:
-            print("NO RESULTS FOUND FOR TEST QUERY!")
-            
-    except Exception as e:
-        print(f"ERROR during embedding/database creation: {e}")
+    print("Generating embeddings with Gemini AI...")
+    response = genai.embed_content(model=embedding_model, content=all_text_chunks, task_type="retrieval_document")
+    embeddings = response['embedding']
+    
+    collection = client.create_collection(collection_name)
+    collection.add(
+        ids=[f"doc_{i}" for i in range(len(all_text_chunks))],
+        embeddings=embeddings,
+        documents=all_text_chunks
+    )
+    print(f"✅ In-memory database initialized successfully with {collection.count()} documents!")
 
 initialize_database()
 
-# --- Enhanced keyword matching function ---
-def get_relevant_page_suggestions(user_query):
-    """Return relevant page suggestions based on query keywords"""
-    query_lower = user_query.lower()
-    suggestions = []
-    
-    print(f"DIAGNOSTIC: Analyzing query for keywords: '{query_lower}'")
-    
-    # Safety-related keywords
-    safety_keywords = ['safety', 'safe', 'guideline', 'storage', 'administration', 'allergy', 'infection', 'emergency', 'procedure', 'protocol', 'risk', 'precaution']
-    safety_matches = [kw for kw in safety_keywords if kw in query_lower]
-    if safety_matches:
-        print(f"DIAGNOSTIC: Safety keywords matched: {safety_matches}")
-        suggestions.append("For detailed safety guidelines, visit: <a href='safety.html'>Safety Page</a>")
-    
-    # Dosage-related keywords
-    dosage_keywords = ['dosage', 'dose', 'calculator', 'how much', 'amount', 'acetaminophen', 'ibuprofen', 'amoxicillin', 'dosing', 'medication amount']
-    dosage_matches = [kw for kw in dosage_keywords if kw in query_lower]
-    if dosage_matches:
-        print(f"DIAGNOSTIC: Dosage keywords matched: {dosage_matches}")
-        suggestions.append("For dosage calculations and guidelines, visit: <a href='dosage.html'>Dosage Page</a>")
-    
-    # Contact-related keywords
-    contact_keywords = ['contact', 'phone', 'email', 'address', 'location', 'hours', 'reach', 'support', 'help', 'call']
-    contact_matches = [kw for kw in contact_keywords if kw in query_lower]
-    if contact_matches:
-        print(f"DIAGNOSTIC: Contact keywords matched: {contact_matches}")
-        suggestions.append("For contact information and support, visit: <a href='contact.html'>Contact Page</a>")
-    
-    print(f"DIAGNOSTIC: Generated {len(suggestions)} page suggestions")
-    return suggestions
-
-# --- Main Chatbot Logic Function ---
+# --- ENHANCED Response Function ---
 def get_chatbot_response(user_query):
     global collection
-    print(f"\n=== PROCESSING QUERY: '{user_query}' ===")
-    
     if not collection:
-        print("ERROR: Database not initialized")
         return "Sorry, the chatbot database is not initialized."
 
-    # First, check for simple navigation commands
-    lower_query = user_query.lower()
-    print(f"DIAGNOSTIC: Checking for navigation commands in: '{lower_query}'")
+    print(f"Processing query: '{user_query}'")
     
-    if "go to" in lower_query or "take me to" in lower_query or "navigate to" in lower_query:
-        print("DIAGNOSTIC: Navigation command detected")
+    # Enhanced navigation commands
+    lower_query = user_query.lower()
+    if any(nav_word in lower_query for nav_word in ["go to", "take me to", "navigate to", "navigate"]):
         if "safety" in lower_query: 
-            print("DIAGNOSTIC: Navigating to safety")
-            return "I'll take you to the safety page now. NAVIGATE_TO_SAFETY"
+            return "I'll take you to our comprehensive safety guidelines page now. NAVIGATE_TO_SAFETY"
         if "dosage" in lower_query: 
-            print("DIAGNOSTIC: Navigating to dosage")
-            return "I'll take you to the dosage page now. NAVIGATE_TO_DOSAGE"
+            return "I'll take you to our dosage calculator and guidelines page now. NAVIGATE_TO_DOSAGE"
         if "contact" in lower_query: 
-            print("DIAGNOSTIC: Navigating to contact")
-            return "I'll take you to the contact page now. NAVIGATE_TO_CONTACT"
+            return "I'll take you to our contact information page now. NAVIGATE_TO_CONTACT"
         if "home" in lower_query: 
-            print("DIAGNOSTIC: Navigating to home")
-            return "I'll take you to the home page now. NAVIGATE_TO_HOME"
+            return "I'll take you to our home page now. NAVIGATE_TO_HOME"
 
-    # Enhanced RAG with better retrieval
-    print("DIAGNOSTIC: Performing vector search...")
-    try:
-        query_embedding = genai.embed_content(model=embedding_model, content=user_query, task_type="retrieval_query")['embedding']
-        results = collection.query(query_embeddings=[query_embedding], n_results=5)
+    # Enhanced vector search
+    query_embedding = genai.embed_content(model=embedding_model, content=user_query, task_type="retrieval_query")['embedding']
+    results = collection.query(query_embeddings=[query_embedding], n_results=6)
+    
+    if not results['documents'] or not results['documents'][0]:
+        return generate_fallback_response(user_query)
         
-        print(f"DIAGNOSTIC: Vector search returned {len(results['documents'][0]) if results['documents'] and results['documents'][0] else 0} results")
-        
-        if not results['documents'] or not results['documents'][0]:
-            print("DIAGNOSTIC: No documents found in vector search")
-            return "I do not have enough information to answer that."
-            
-        retrieved_context = "\n\n".join(results['documents'][0])
-        print(f"DIAGNOSTIC: Retrieved context length: {len(retrieved_context)} characters")
-        print(f"DIAGNOSTIC: Context preview: {retrieved_context[:300]}...")
-        
-        # Get page suggestions based on keywords
-        page_suggestions = get_relevant_page_suggestions(user_query)
+    retrieved_context = "\n\n".join(results['documents'][0])
+    print(f"Retrieved context length: {len(retrieved_context)}")
 
-        # Simple response generation for testing
-        if "safety" in user_query.lower():
-            response = f"""Based on our safety guidelines:
+    # Generate smart page suggestions
+    page_suggestions = get_smart_suggestions(user_query)
+    
+    # SIMPLIFIED BUT EFFECTIVE PROMPT
+    prompt = f"""
+You are MediCare Plus AI Assistant, a helpful healthcare chatbot.
 
-{retrieved_context[:500]}...
-
-**Relevant Links:**
-- <a href='safety.html'>Safety Page</a> - Complete safety guidelines and protocols
-- <a href='index.html'>Home Page</a> - Main healthcare information
-
-{' | '.join(page_suggestions) if page_suggestions else ''}
-
-Please consult with healthcare professionals for personalized safety advice."""
-            
-            return response
-        
-        # For other queries, use the AI model
-        prompt = f"""
-You are MediCare Plus AI Assistant. Answer the user's question using the context provided.
+TASK: Answer the user's question using the provided CONTEXT. Always include relevant links.
 
 CONTEXT:
 {retrieved_context}
 
 USER QUESTION: {user_query}
 
-INSTRUCTIONS:
-1. Provide a helpful answer based on the context
-2. Include any links mentioned in the context
-3. Add relevant page suggestions: {' | '.join(page_suggestions) if page_suggestions else 'Visit our main pages for more information'}
+RESPONSE RULES:
+1. Give a helpful answer based on the CONTEXT
+2. Extract and include ALL links found in the context
+3. Format links as: <a href='filename.html'>Page Name</a> or <a href='full-url'>Link Text</a>
+4. Add these relevant page suggestions: {page_suggestions}
+5. Always end with "For personalized medical advice, consult your healthcare provider."
 
-Answer:"""
+ANSWER:
+"""
 
+    try:
         final_answer = chat_model.generate_content(prompt)
-        response_text = final_answer.text
+        response = final_answer.text
         
-        # Ensure we always have some relevant links
-        if "href=" not in response_text and page_suggestions:
-            response_text += f"\n\n**Relevant Links:**\n" + '\n'.join(page_suggestions)
+        # Ensure links are included
+        if not any(indicator in response for indicator in ["<a href", "http", "safety.html", "dosage.html", "contact.html"]):
+            response += f"\n\n**Quick Links:**\n{page_suggestions}"
         
-        print(f"DIAGNOSTIC: Generated response length: {len(response_text)} characters")
-        return response_text
+        print(f"Generated response length: {len(response)}")
+        return response
         
     except Exception as e:
-        print(f"ERROR generating response: {e}")
-        return f"I apologize, but I'm having trouble processing your request. Error: {str(e)}"
+        print(f"Error generating AI response: {e}")
+        return generate_fallback_response(user_query)
+
+def get_smart_suggestions(user_query):
+    """Generate smart page suggestions based on query content"""
+    query_lower = user_query.lower()
+    suggestions = []
+    
+    # Safety-related
+    if any(word in query_lower for word in ['safety', 'safe', 'storage', 'administration', 'emergency', 'allergy', 'infection', 'risk', 'precaution', 'guideline']):
+        suggestions.append("• <a href='safety.html'>Safety Guidelines</a> - Comprehensive medication safety protocols")
+    
+    # Dosage-related  
+    if any(word in query_lower for word in ['dosage', 'dose', 'amount', 'how much', 'calculator', 'acetaminophen', 'ibuprofen', 'amoxicillin', 'medication']):
+        suggestions.append("• <a href='dosage.html'>Dosage Calculator</a> - Interactive medication dosing tools")
+    
+    # Contact-related
+    if any(word in query_lower for word in ['contact', 'phone', 'email', 'address', 'support', 'help', 'call', 'reach']):
+        suggestions.append("• <a href='contact.html'>Contact Us</a> - Get in touch with our support team")
+    
+    # Always include home page
+    suggestions.append("• <a href='index.html'>Home</a> - Main healthcare information hub")
+    
+    return "\n".join(suggestions)
+
+def generate_fallback_response(user_query):
+    """Generate a helpful fallback response when vector search fails"""
+    query_lower = user_query.lower()
+    
+    if "safety" in query_lower:
+        return """
+**Medication Safety Guidelines:**
+
+Key safety practices include:
+- Store medications in cool, dry places away from sunlight
+- Keep medications in original containers with labels
+- Check expiration dates regularly
+- Never share prescription medications
+- Keep medications away from children and pets
+
+**Relevant Resources:**
+• <a href='safety.html'>Complete Safety Guidelines</a>
+• <a href='contact.html'>Contact Support</a>
+• <a href='https://www.fda.gov/drugs/information-consumers-and-patients-drugs/'>FDA Drug Safety</a>
+
+For personalized medical advice, consult your healthcare provider.
+"""
+    
+    elif any(word in query_lower for word in ['dosage', 'dose', 'amount']):
+        return """
+**Medication Dosage Information:**
+
+Proper dosing is crucial for medication effectiveness and safety:
+- Always follow prescriber instructions
+- Use appropriate measuring devices
+- Consider patient age, weight, and medical conditions
+- Never exceed recommended doses
+
+**Dosage Resources:**
+• <a href='dosage.html'>Dosage Calculator</a>
+• <a href='safety.html'>Safety Guidelines</a>
+• <a href='contact.html'>Contact Support</a>
+
+For personalized medical advice, consult your healthcare provider.
+"""
+    
+    elif any(word in query_lower for word in ['contact', 'phone', 'email', 'support']):
+        return """
+**Contact Information:**
+
+Get in touch with our healthcare support team:
+- Phone: +91 11 2345 6789
+- Email: info@medicareplus.com
+- Address: 123 Healthcare Street, New Delhi 110001
+
+**Quick Links:**
+• <a href='contact.html'>Full Contact Details</a>
+• <a href='index.html'>Home Page</a>
+• <a href='safety.html'>Safety Guidelines</a>
+
+For personalized medical advice, consult your healthcare provider.
+"""
+    
+    else:
+        return """
+I'm here to help with healthcare questions, medication safety, dosage calculations, and more.
+
+**Popular Resources:**
+• <a href='safety.html'>Safety Guidelines</a> - Medication safety protocols
+• <a href='dosage.html'>Dosage Calculator</a> - Interactive dosing tools  
+• <a href='contact.html'>Contact Us</a> - Support and information
+• <a href='index.html'>Home</a> - Main healthcare hub
+
+How can I assist you with your healthcare needs today?
+
+For personalized medical advice, consult your healthcare provider.
+"""
 
 # --- API Endpoints ---
 @app.route('/chat', methods=['POST'])
 def chat():
     user_message = request.json.get('message')
-    print(f"\n=== API CALL RECEIVED ===")
-    print(f"Message: {user_message}")
-    
     if not user_message:
         return jsonify({"error": "No message provided"}), 400
     
-    try:
-        bot_response = get_chatbot_response(user_message)
-        print(f"=== API RESPONSE ===")
-        print(f"Response length: {len(bot_response)} characters")
-        print(f"Response preview: {bot_response[:200]}...")
-        return jsonify({"response": bot_response})
-    except Exception as e:
-        print(f"ERROR in chat endpoint: {e}")
-        return jsonify({"error": str(e)}), 500
+    bot_response = get_chatbot_response(user_message)
+    return jsonify({"response": bot_response})
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    health_info = {
+    return jsonify({
         "status": "ok", 
         "database_initialized": collection is not None,
-        "collection_count": collection.count() if collection else 0
-    }
-    print(f"Health check: {health_info}")
-    return jsonify(health_info)
-
-@app.route('/debug', methods=['GET'])
-def debug_info():
-    """Debug endpoint to check what's in the database"""
-    if not collection:
-        return jsonify({"error": "Database not initialized"})
-    
-    # Get a sample of documents
-    sample_results = collection.query(query_embeddings=[[0.1] * 768], n_results=3)  # Dummy query
-    
-    debug_data = {
-        "total_documents": collection.count(),
-        "sample_documents": sample_results['documents'][0] if sample_results['documents'] else [],
-        "sample_metadata": sample_results['metadatas'][0] if sample_results['metadatas'] else []
-    }
-    
-    return jsonify(debug_data)
+        "total_documents": collection.count() if collection else 0
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
