@@ -528,10 +528,10 @@
                 }
             }
 
-           // FIXED: Properly define callGeminiAPI function as async
+ // FIXED: Properly define callGeminiAPI function as async
     async function callGeminiAPI(userMessage) {
         // Use the URL for your backend on Render
-       const backendUrl = 'https://healthcare-chatbot-website-843177386252.europe-west1.run.app/chat'; 
+       const backendUrl = 'https://healthcare-chatbot-website-354743195635.asia-south2.run.app/chat';
         try {
             const response = await fetch(backendUrl, {
                 method: 'POST', // The POST method is allowed by your Render app
@@ -540,8 +540,6 @@
                 body: JSON.stringify({ message: userMessage })
             });
 
-                const data = await response.json();
-                return data.response;
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -554,6 +552,7 @@
             throw error; // Re-throw to be handled by sendMessage
         }
     }
+
             // Enhanced addMessage function to handle URL formatting with better link detection
             function addMessage(message, sender, saveToHistory = true) {
                 const messagesContainer = document.getElementById('chatMessages');
