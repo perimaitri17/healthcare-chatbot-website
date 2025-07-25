@@ -416,7 +416,7 @@
     </div>
 
     <script>
-        // Define a constant for the localStorage key
+       // Define a constant for the localStorage key
 const CHAT_HISTORY_KEY = 'medicarePlusChatHistory';
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -425,7 +425,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentHost = window.location.hostname;
     
     // Highlight the active navigation link based on the current page
-    const currentPage = window.location.pathname.split('/').pop(); // e.g., "index.html"
+    const currentPage = window.location.pathname.split('/').pop();
     document.querySelectorAll('.nav-link').forEach(link => {
         if (link.getAttribute('href') === currentPage || (currentPage === '' && link.getAttribute('href') === 'index.html')) {
             link.classList.add('active');
@@ -435,7 +435,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- Chat History Management ---
-    let chatHistory = []; // Array to store message objects {sender: 'user'/'ai', text: 'message'}
+    let chatHistory = [];
 
     function saveChatHistory() {
         try {
@@ -448,70 +448,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadChatHistory() {
         const messagesContainer = document.getElementById('chatMessages');
-        // Ensure messagesContainer exists before clearing its content
         if (messagesContainer) {
-            messagesContainer.innerHTML = ''; // Clear existing messages before loading
+            messagesContainer.innerHTML = '';
         } else {
             console.error('Chat messages container not found!');
-            return; // Exit if container is missing
+            return;
         }
 
         try {
-            // Load saved chat history from localStorage
             const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY);
             
             if (savedHistory) {
                 chatHistory = JSON.parse(savedHistory);
                 console.log('Loaded chat history:', chatHistory.length, 'messages');
                 
-                // Display all saved messages
                 chatHistory.forEach(msg => {
-                    addMessage(msg.text, msg.sender, false); // false = don't save again
+                    addMessage(msg.text, msg.sender, false);
                 });
                 
-                // If there are saved messages, don't add welcome message
                 if (chatHistory.length > 0) {
                     return;
                 }
             }
             
-            // Only add welcome message if no history exists
-            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
-            
+            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, dosage calculations, and more. How can I assist you today?", 'ai', true);
         } catch (e) {
             console.error('Error loading chat history:', e);
-            // Fallback: Add initial AI message if loading fails
-            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
+            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, dosage calculations, and more. How can I assist you today?", 'ai', true);
         }
     }
 
     // Function to clear chat history
     window.clearChatHistory = function() {
         if (confirm('Are you sure you want to delete all chat history? This action cannot be undone.')) {
-            // Clear the chat history array
             chatHistory = [];
-            
-            // Clear the messages container
             const messagesContainer = document.getElementById('chatMessages');
             if (messagesContainer) {
                 messagesContainer.innerHTML = '';
             }
             
-            // Remove from localStorage
             try {
                 localStorage.removeItem(CHAT_HISTORY_KEY);
             } catch (e) {
                 console.error('Error clearing localStorage:', e);
             }
             
-            // Add welcome message back
-            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, and more. How can I assist you today?", 'ai', true);
-            
+            addMessage("Hello! I'm your MediCare AI Assistant. I can help you with healthcare questions, medication information, safety guidelines, dosage calculations, and more. How can I assist you today?", 'ai', true);
             console.log('Chat history cleared successfully');
         }
     }
 
-    // Function to open chatbot (for AI Assistant card)
     window.openChatbot = function() {
         const widget = document.getElementById('chatWidget');
         const toggle = document.getElementById('chatToggle');
@@ -519,41 +505,31 @@ document.addEventListener('DOMContentLoaded', function() {
         if (widget) {
             widget.style.display = 'flex';
             if (toggle) toggle.style.display = 'none';
-        } else {
-            console.error('Chat widget element not found!');
         }
     }
 
-    // FIXED: Properly define toggleChat function in global scope
     window.toggleChat = function() {
         const widget = document.getElementById('chatWidget');
         const toggle = document.getElementById('chatToggle');
        
-        if (widget) { // Null check for chatWidget
+        if (widget) {
             if (widget.style.display === 'none' || widget.style.display === '') {
                 widget.style.display = 'flex';
-                if (toggle) toggle.style.display = 'none'; // Only hide toggle if it exists
+                if (toggle) toggle.style.display = 'none';
             } else {
                 widget.style.display = 'none';
-                if (toggle) toggle.style.display = 'flex'; // Only show toggle if it exists
+                if (toggle) toggle.style.display = 'flex';
             }
-        } else {
-            console.error('Chat widget element not found!');
         }
     }
 
-    // FIXED: Properly define sendMessage function in global scope
     window.sendMessage = async function() {
         const input = document.getElementById('chatInput');
         const message = input.value.trim();
        
-        if (!input) { // Null check for chatInput
-            console.error('Chat input element not found!');
-            return;
-        }
-        if (!message) return;
+        if (!input || !message) return;
        
-        addMessage(message, 'user', true); // Save user message
+        addMessage(message, 'user', true);
         input.value = '';
        
         showTypingIndicator();
@@ -561,18 +537,15 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await callGeminiAPI(message);
             hideTypingIndicator();
-            addMessage(response, 'ai', true); // Save AI response
-           
-            // Check if the response contains navigation instructions and redirect if needed
+            addMessage(response, 'ai', true);
             checkForNavigation(response);
         } catch (error) {
             hideTypingIndicator();
-            addMessage('I apologize, but I\'m having trouble connecting right now. Please try again later or contact our support team at +91 11 2345 6789.', 'ai', true); // Save error message
+            addMessage('I apologize, but I\'m having trouble connecting right now. Please try again later or contact our support team at +91 11 2345 6789.', 'ai', true);
             console.error('Error:', error);
         }
     }
 
-    // Function to check for navigation commands and redirect
     function checkForNavigation(response) {
         const navigationCommands = {
             'NAVIGATE_TO_HOME': 'index.html',
@@ -585,21 +558,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.includes(command)) {
                 setTimeout(() => {
                     window.location.href = url;
-                }, 2000); // 2-second delay to let user see the message
+                }, 2000);
                 break;
             }
         }
     }
 
-    // FIXED: Properly define callGeminiAPI function as async
     async function callGeminiAPI(userMessage) {
-        // Use the URL for your backend on Render
-       const backendUrl = 'https://healthcare-chatbot-website-354743195635.asia-south2.run.app/chat';
+        const backendUrl = 'https://healthcare-chatbot-website-354743195635.asia-south2.run.app/chat';
         try {
             const response = await fetch(backendUrl, {
-                method: 'POST', // The POST method is allowed by your Render app
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                mode: 'cors', // Explicitly set CORS mode
+                mode: 'cors',
                 body: JSON.stringify({ message: userMessage })
             });
 
@@ -612,14 +583,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         } catch (error) {
             console.error('Error calling API:', error);
-            throw error; // Re-throw to be handled by sendMessage
+            throw error;
         }
     }
 
-    // Enhanced addMessage function to handle URL formatting with better link detection
+    // ENHANCED addMessage function with better link processing
     function addMessage(message, sender, saveToHistory = true) {
         const messagesContainer = document.getElementById('chatMessages');
-        // Ensure messagesContainer exists before adding messages
         if (!messagesContainer) {
             console.error('Chat messages container not found when trying to add message!');
             return;
@@ -635,7 +605,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const content = document.createElement('div');
         content.className = 'message-content';
        
-        // For AI messages, process URLs and use innerHTML to render clickable links
         if (sender === 'ai') {
             const processedMessage = processLinksInMessage(message);
             content.innerHTML = processedMessage;
@@ -649,73 +618,60 @@ document.addEventListener('DOMContentLoaded', function() {
        
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-        // Save to history and localStorage
         if (saveToHistory) {
             chatHistory.push({ sender: sender, text: message });
             saveChatHistory();
         }
     }
 
-    // IMPROVED function to process all types of links in messages
+    // IMPROVED link processing function
     function processLinksInMessage(message) {
         let processedMessage = message;
         
-        // Step 1: Preserve existing HTML links and improve them with proper classes
+        // Convert markdown-style formatting to HTML if present
+        processedMessage = processedMessage.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        processedMessage = processedMessage.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        
+        // Process existing HTML links and improve them
         processedMessage = processedMessage.replace(/<a\s+([^>]*?)href=['"]([^'"]*?)['"]([^>]*?)>(.*?)<\/a>/gi, (match, beforeHref, url, afterHref, linkText) => {
-            // Determine link type and add appropriate class
             let linkClass = '';
+            let displayText = linkText;
             
+            // Determine link type and styling
             if (url.includes('.html') || url.startsWith('#') || (!url.includes('http') && !url.includes('://'))) {
-                // Internal links
                 linkClass = 'internal-link';
-                // For internal links, show the full URL if it's not a simple filename
-                if (url.includes('.html') && !linkText.includes(currentDomain)) {
-                    linkText = `${linkText} (${currentDomain}/${url})`;
-                }
+                // Style internal links with a nice background
+                return `<a href="${url}" class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm hover:bg-blue-200 transition-colors" style="text-decoration: none; margin: 2px;">${displayText}</a>`;
             } else if (url.includes('.pdf') || url.includes('.doc') || url.includes('.xls') || url.includes('download')) {
-                // Download links
                 linkClass = 'download-link';
-                // Show full URL for download links
-                if (linkText !== url) {
-                    linkText = `${linkText} (${url})`;
-                }
+                return `<a href="${url}" class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-sm hover:bg-green-200 transition-colors" target="_blank" rel="noopener noreferrer" style="text-decoration: none; margin: 2px;">📁 ${displayText}</a>`;
             } else {
-                // External links
                 linkClass = 'external-link';
-                // Show full URL for external links
-                if (linkText !== url) {
-                    linkText = `${linkText} (${url})`;
-                }
+                return `<a href="${url}" class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm hover:bg-purple-200 transition-colors" target="_blank" rel="noopener noreferrer" style="text-decoration: none; margin: 2px;">🔗 ${displayText}</a>`;
             }
-            
-            return `<a ${beforeHref}href="${url}" class="${linkClass}" ${afterHref} target="_blank" rel="noopener noreferrer">${linkText}</a>`;
         });
         
-        // Step 2: Convert standalone URLs that aren't already in HTML tags
-        const urlRegex = /(?<!href=['"])(https?:\/\/[^\s<>"']+)/gi;
-        
+        // Convert standalone URLs that aren't already in HTML tags
+        const urlRegex = /(?<!href=['"]|>)(https?:\/\/[^\s<>"'\)]+)/gi;
         processedMessage = processedMessage.replace(urlRegex, (url) => {
             // Check if this URL is already inside an HTML tag
             const beforeUrl = processedMessage.substring(0, processedMessage.indexOf(url));
             const lastOpenTag = beforeUrl.lastIndexOf('<');
             const lastCloseTag = beforeUrl.lastIndexOf('>');
             
-            // If we're inside an HTML tag, don't convert
             if (lastOpenTag > lastCloseTag) {
                 return url;
             }
             
-            // Determine link type for standalone URLs
-            let linkClass = 'external-link';
+            // Style external URLs
             if (url.includes('.pdf') || url.includes('.doc') || url.includes('.xls') || url.includes('download')) {
-                linkClass = 'download-link';
+                return `<a href="${url}" class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-sm hover:bg-green-200 transition-colors" target="_blank" rel="noopener noreferrer" style="text-decoration: none; margin: 2px;">📁 ${url}</a>`;
+            } else {
+                return `<a href="${url}" class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm hover:bg-purple-200 transition-colors" target="_blank" rel="noopener noreferrer" style="text-decoration: none; margin: 2px;">🔗 ${url}</a>`;
             }
-            
-            // Convert standalone URLs to clickable links with full URL display
-            return `<a href="${url}" class="${linkClass}" target="_blank" rel="noopener noreferrer">${url}</a>`;
         });
 
-        // Step 3: Convert internal page references to proper links
+        // Convert page references to proper links
         const internalPageRegex = /\b(Safety Page|Dosage Page|Contact Page|Home Page)\b/gi;
         processedMessage = processedMessage.replace(internalPageRegex, (match) => {
             const pageMap = {
@@ -727,11 +683,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const fileName = pageMap[match];
             if (fileName) {
-                const fullUrl = `${currentDomain}/${fileName}`;
-                return `<a href="${fileName}" class="internal-link">${match} (${fullUrl})</a>`;
+                return `<a href="${fileName}" class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm hover:bg-blue-200 transition-colors" style="text-decoration: none; margin: 2px;">${match}</a>`;
             }
             return match;
         });
+        
+        // Process line breaks for better formatting
+        processedMessage = processedMessage.replace(/\n\n/g, '<br><br>');
+        processedMessage = processedMessage.replace(/\n/g, '<br>');
         
         return processedMessage;
     }
@@ -740,8 +699,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) {
             typingIndicator.style.display = 'flex';
-        } else {
-            console.error('Typing indicator element not found!');
         }
         const messagesContainer = document.getElementById('chatMessages');
         if (messagesContainer) {
@@ -753,86 +710,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) {
             typingIndicator.style.display = 'none';
-        } else {
-            console.error('Typing indicator element not found!');
         }
-    }
-
-    function getWebsiteContext() {
-        // UPDATED: Enhanced context with better search patterns and link formatting
-        return `
-        You are MediCare Plus AI Assistant, a healthcare chatbot for our website.
-        Current website domain: ${currentDomain}
-        
-        The website has the following main pages:
-        - Home: index.html (Overview, services, about us)
-        - Safety: safety.html (Medication storage, administration safety, allergy management, infection control, emergency procedures, safety checklists)
-        - Dosage: dosage.html (Medication dosage calculators for Acetaminophen, Ibuprofen, Amoxicillin, dosing guidelines)
-        - Contact: contact.html (Contact form, address: 123 Healthcare Street, New Delhi 110001, phone: +91 11 2345 6789, email: info@medicareplus.com, hours, social media)
-
-        ENHANCED SEARCH INTELLIGENCE - Match user queries to appropriate content:
-        
-        For SAFETY-related queries, keywords, or requests:
-        - "safety", "guidelines", "medication safety", "storage", "administration", "allergy", "infection control", "emergency", "procedures", "protocols"
-        - Always provide comprehensive safety information AND suggest the Safety Page
-        
-        For DOSAGE-related queries:
-        - "dosage", "dose", "calculator", "how much", "medication amount", "acetaminophen", "ibuprofen", "amoxicillin", "dosing"
-        - Always provide dosage guidance AND suggest the Dosage Page with calculator
-        
-        For CONTACT-related queries:
-        - "contact", "phone", "email", "address", "location", "hours", "reach", "support"
-        - Always provide contact information AND suggest the Contact Page
-        
-        LINK FORMATTING RULES (CRITICAL - Follow exactly):
-        
-        1. For internal website navigation, format as:
-           <a href='safety.html'>Safety Page</a>
-           <a href='dosage.html'>Dosage Page</a>
-           <a href='contact.html'>Contact Page</a>
-           <a href='index.html'>Home Page</a>
-           
-        2. For external links, ALWAYS provide the complete URL as plain text:
-           https://www.cdc.gov/medicationsafety/
-           https://www.fda.gov/drugs/information-consumers-and-patients-drugs/
-           
-        3. For downloadable content, include the full URL:
-           https://www.who.int/publications/medication-safety-guidelines.pdf
-
-        4. INTELLIGENT RESPONSE FORMAT:
-           When user asks about safety checklists:
-           A printable checklist to help you ensure safe medication storage and administration at home.
-           https://www.ets.org/s/gre/pdf/gre_info_test_centers.pdf
-
-        5. REDIRECT FEATURE: Only use these when user explicitly asks to GO TO or BE TAKEN TO a page:
-           - For Home: Include "NAVIGATE_TO_HOME" 
-           - For Safety: Include "NAVIGATE_TO_SAFETY"
-           - For Dosage: Include "NAVIGATE_TO_DOSAGE" 
-           - For Contact: Include "NAVIGATE_TO_CONTACT"
-
-        RESPONSE GUIDELINES:
-        - Always provide helpful content first, then suggest relevant pages
-        - Match user intent intelligently (safety queries → safety content + Safety Page)
-        - Include both internal pages and external authoritative sources when relevant
-        - Show full URLs for external resources to build trust
-        - Be conversational but professional
-        - Always emphasize consulting healthcare professionals for personalized advice
-        - For emergency situations, always direct to emergency services first
-
-        Remember: The JavaScript will automatically format all links to show full URLs, so focus on providing the right content and appropriate link references.
-        `;
     }
 
     // Enter key support for chat
     const chatInput = document.getElementById('chatInput');
-    if (chatInput) { // Added null check
+    if (chatInput) {
         chatInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
-    } else {
-        console.error("Chat input element not found, cannot attach keypress listener!");
     }
 
     // Load chat history when the page loads
