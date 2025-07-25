@@ -4,6 +4,7 @@ import google.generativeai as genai
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import re
 
 print("--- GCP Chatbot Service Starting [v2 - Enhanced Prompt] ---")
 
@@ -31,15 +32,45 @@ def initialize_database():
     global collection
     print("Initializing in-memory vector database...")
     all_text_chunks = []
+    metadata_list = []
+    
     for filename in os.listdir(html_folder_path):
         if filename.endswith(".html"):
             file_path = os.path.join(html_folder_path, filename)
             with open(file_path, 'r', encoding='utf-8') as f:
                 soup = BeautifulSoup(f.read(), 'lxml')
-                # Add the filename to each chunk for context
+                
+                # Extract text content with better structure preservation
                 page_content = soup.get_text(separator='\n', strip=True)
-                chunks = [f"Context from {filename}:\n{chunk}" for chunk in page_content.split('\n') if len(chunk.strip()) > 20]
-                all_text_chunks.extend(chunks)
+                
+                # Extract links from the HTML
+                links = []
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    link_text = link.get_text(strip=True)
+                    if href and link_text:
+                        links.append(f"{link_text}: {href}")
+                
+                # Create more meaningful chunks with better context
+                lines = [line.strip() for line in page_content.split('\n') if len(line.strip()) > 20]
+                
+                # Group lines into larger, more contextual chunks
+                chunk_size = 3  # Group 3 lines together for better context
+                for i in range(0, len(lines), chunk_size):
+                    chunk_lines = lines[i:i+chunk_size]
+                    chunk_text = '\n'.join(chunk_lines)
+                    
+                    # Add filename and links context to each chunk
+                    enriched_chunk = f"Page: {filename}\n{chunk_text}"
+                    if links:
+                        enriched_chunk += f"\n\nAvailable links on this page:\n" + '\n'.join(links[:5])  # Limit to 5 links per chunk
+                    
+                    all_text_chunks.append(enriched_chunk)
+                    metadata_list.append({
+                        'filename': filename,
+                        'chunk_index': len(all_text_chunks) - 1
+                    })
+    
     print(f"Found {len(all_text_chunks)} total text chunks.")
 
     if not all_text_chunks:
@@ -49,15 +80,40 @@ def initialize_database():
     print("Generating embeddings...")
     response = genai.embed_content(model=embedding_model, content=all_text_chunks, task_type="retrieval_document")
     embeddings = response['embedding']
+    
     collection = client.create_collection(collection_name)
     collection.add(
         ids=[f"doc_{i}" for i in range(len(all_text_chunks))],
         embeddings=embeddings,
-        documents=all_text_chunks
+        documents=all_text_chunks,
+        metadatas=metadata_list
     )
     print(f"✅ Database initialized with {collection.count()} documents!")
 
 initialize_database()
+
+# --- Enhanced keyword matching function ---
+def get_relevant_page_suggestions(user_query):
+    """Return relevant page suggestions based on query keywords"""
+    query_lower = user_query.lower()
+    suggestions = []
+    
+    # Safety-related keywords
+    safety_keywords = ['safety', 'safe', 'guideline', 'storage', 'administration', 'allergy', 'infection', 'emergency', 'procedure', 'protocol', 'risk', 'precaution']
+    if any(keyword in query_lower for keyword in safety_keywords):
+        suggestions.append("For detailed safety guidelines, visit: <a href='safety.html'>Safety Page</a>")
+    
+    # Dosage-related keywords
+    dosage_keywords = ['dosage', 'dose', 'calculator', 'how much', 'amount', 'acetaminophen', 'ibuprofen', 'amoxicillin', 'dosing', 'medication amount']
+    if any(keyword in query_lower for keyword in dosage_keywords):
+        suggestions.append("For dosage calculations and guidelines, visit: <a href='dosage.html'>Dosage Page</a>")
+    
+    # Contact-related keywords
+    contact_keywords = ['contact', 'phone', 'email', 'address', 'location', 'hours', 'reach', 'support', 'help', 'call']
+    if any(keyword in query_lower for keyword in contact_keywords):
+        suggestions.append("For contact information and support, visit: <a href='contact.html'>Contact Page</a>")
+    
+    return suggestions
 
 # --- Main Chatbot Logic Function ---
 def get_chatbot_response(user_query):
@@ -73,38 +129,69 @@ def get_chatbot_response(user_query):
         if "contact" in lower_query: return "NAVIGATE_TO_CONTACT"
         if "home" in lower_query: return "NAVIGATE_TO_HOME"
 
-    # If not a navigation command, proceed with RAG
+    # Enhanced RAG with better retrieval
     query_embedding = genai.embed_content(model=embedding_model, content=user_query, task_type="retrieval_query")['embedding']
-    results = collection.query(query_embeddings=[query_embedding], n_results=5) # Get more context
+    results = collection.query(query_embeddings=[query_embedding], n_results=8)  # Get more context
     
     if not results['documents'] or not results['documents'][0]:
         return "I do not have enough information to answer that."
         
     retrieved_context = "\n\n".join(results['documents'][0])
 
-    # --- THIS IS THE NEW, ENHANCED PROMPT ---
+    # Get page suggestions based on keywords
+    page_suggestions = get_relevant_page_suggestions(user_query)
+
+    # --- ENHANCED PROMPT WITH BETTER INSTRUCTIONS ---
     prompt = f"""
-    You are "MediCare Plus AI Assistant", a friendly and helpful chatbot for a healthcare website.
-    Your primary goal is to answer user questions by providing a concise summary based ONLY on the provided CONTEXT.
-    After the summary, you MUST include a "Relevant Links:" section listing any relevant URLs or page references found in the context.
+You are "MediCare Plus AI Assistant", a friendly and helpful healthcare chatbot.
 
-    **CRITICAL RULES:**
-    1.  **Summarize First:** Read the user's QUESTION and provide a helpful, summary-style answer using only the information from the CONTEXT.
-    2.  **List All Links:** After your summary, if the CONTEXT contains any URLs (like `https://...` or `safety.html`), list them under a "Relevant Links:" heading. Include download links for PDFs and links to other pages.
-    3.  **Be Honest:** If the CONTEXT does not contain enough information to answer the QUESTION, you MUST respond with: "I do not have enough information from the website to answer that." Do not make up information.
-    4.  **Stay in Character:** Be professional, helpful, and empathetic.
+Your task is to:
+1. Provide a helpful, detailed answer to the user's question using ONLY the information from the CONTEXT below
+2. After your answer, include a "Relevant Links:" section with any links mentioned in the context
+3. Include relevant page suggestions based on the user's query
 
-    ---
-    CONTEXT:
-    {retrieved_context}
-    ---
-    QUESTION:
-    {user_query}
-    ---
-    ANSWER:
-    """
-    final_answer = chat_model.generate_content(prompt)
-    return final_answer.text
+**CRITICAL FORMATTING RULES:**
+- Extract and display ALL links found in the context (both internal pages like safety.html and external URLs)
+- Format internal page links as: <a href='filename.html'>Page Name</a>
+- Include external URLs as complete clickable links
+- If the context mentions downloadable files, include those links too
+- Always include the page suggestions provided below
+
+**CONTEXT:**
+{retrieved_context}
+
+**PAGE SUGGESTIONS:**
+{' '.join(page_suggestions) if page_suggestions else 'For more information, visit our <a href="index.html">Home Page</a>'}
+
+**USER QUESTION:**
+{user_query}
+
+**ANSWER FORMAT:**
+[Your detailed answer here based on the context]
+
+**Relevant Links:**
+[List all links found in the context, plus the page suggestions above]
+
+Remember: 
+- Be professional and empathetic
+- If the context doesn't contain enough information, say so honestly
+- Always recommend consulting healthcare professionals for personalized advice
+- Focus on providing accurate information from the context provided
+"""
+
+    try:
+        final_answer = chat_model.generate_content(prompt)
+        response_text = final_answer.text
+        
+        # Ensure we always have some relevant links
+        if "Relevant Links:" not in response_text and page_suggestions:
+            response_text += f"\n\n**Relevant Links:**\n" + '\n'.join(page_suggestions)
+        
+        return response_text
+        
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return "I apologize, but I'm having trouble processing your request right now. Please try again or contact our support team."
 
 # --- API Endpoints ---
 @app.route('/chat', methods=['POST'])
