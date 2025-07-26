@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-print("--- GCP Chatbot Service Starting [TARGETED FIX] ---")
+print("--- GCP Chatbot Service Starting [TARGETED RESPONSES] ---")
 
 # --- Basic Flask App Setup ---
 app = Flask(__name__)
@@ -91,6 +91,100 @@ KEYWORDS: {filename.replace('.html', '')} healthcare medical safety dosage conta
 
 initialize_database()
 
+# --- KEYWORD-BASED RESPONSE MAPPING ---
+def get_targeted_links(query_lower):
+    """Return only relevant links based on keywords"""
+    links = {}
+    
+    # Safety-related keywords
+    if any(word in query_lower for word in ['safety', 'safe', 'storage', 'administration', 'emergency', 'allergy', 'infection', 'risk', 'precaution', 'guideline', 'ppe', 'sterile', 'hygiene']):
+        links['safety'] = "https://healthcare-chatbot-website.netlify.app/safety.html"
+    
+    # Dosage-related keywords
+    if any(word in query_lower for word in ['dosage', 'dose', 'amount', 'how much', 'calculator', 'acetaminophen', 'ibuprofen', 'amoxicillin', 'medication', 'mg', 'ml', 'prescription']):
+        links['dosage'] = "https://healthcare-chatbot-website.netlify.app/dosage.html"
+    
+    # Contact-related keywords
+    if any(word in query_lower for word in ['contact', 'phone', 'email', 'address', 'support', 'help', 'call', 'reach', 'emergency']):
+        links['contact'] = "https://healthcare-chatbot-website.netlify.app/contact.html"
+    
+    # Download-related keywords
+    if 'download' in query_lower:
+        if 'pdf' in query_lower or len([word for word in ['download'] if word in query_lower]) == 1:
+            # If only "download" is mentioned or "pdf" is specified, show all PDFs
+            links['downloads'] = [
+                "https://www.africau.edu/images/default/sample.pdf",
+                "https://www.w3.org/WAI/ER/PRACTICES/pdf/text-document.pdf", 
+                "https://www.ets.org/s/gre/pdf/gre_info_test_centers.pdf"
+            ]
+    
+    # External site keywords
+    if 'who' in query_lower:
+        links['who'] = "https://www.who.int/"
+    if 'cdc' in query_lower:
+        links['cdc'] = "https://www.cdc.gov/"
+    if 'nih' in query_lower:
+        links['nih'] = "https://www.nih.gov/"
+    
+    return links
+
+def handle_navigation(user_query):
+    """Handle navigation commands and return appropriate response"""
+    lower_query = user_query.lower()
+    
+    # Check for navigation commands
+    if any(nav_word in lower_query for nav_word in ["go to", "take me to", "navigate to", "navigate"]):
+        if "safety" in lower_query:
+            return "NAVIGATE:safety"
+        elif "dosage" in lower_query:
+            return "NAVIGATE:dosage"
+        elif "contact" in lower_query:
+            return "NAVIGATE:contact"
+        elif "home" in lower_query:
+            return "NAVIGATE:home"
+    
+    return None
+
+def format_targeted_response(content, links, query):
+    """Format response with only relevant links"""
+    response_parts = [content.strip()]
+    
+    if links:
+        response_parts.append("\n**Relevant Links:**")
+        
+        # Format different types of links
+        if 'safety' in links:
+            response_parts.append(f"• Safety Guidelines: {links['safety']}")
+        
+        if 'dosage' in links:
+            response_parts.append(f"• Dosage Calculator: {links['dosage']}")
+        
+        if 'contact' in links:
+            response_parts.append(f"• Contact Us: {links['contact']}")
+        
+        if 'downloads' in links:
+            if len(links['downloads']) == 1:
+                response_parts.append(f"• Download PDF: {links['downloads'][0]}")
+            else:
+                response_parts.append("• Download PDFs:")
+                for pdf_link in links['downloads']:
+                    response_parts.append(f"  - {pdf_link}")
+        
+        if 'who' in links:
+            response_parts.append(f"• WHO Site: {links['who']}")
+        
+        if 'cdc' in links:
+            response_parts.append(f"• CDC Site: {links['cdc']}")
+        
+        if 'nih' in links:
+            response_parts.append(f"• NIH Site: {links['nih']}")
+    
+    # Add home link only if no specific links were found
+    if not links:
+        response_parts.append(f"\n• Home: https://healthcare-chatbot-website.netlify.app/index.html")
+    
+    return "\n".join(response_parts)
+
 # --- ENHANCED Response Function ---
 def get_chatbot_response(user_query):
     global collection
@@ -99,36 +193,29 @@ def get_chatbot_response(user_query):
 
     print(f"Processing query: '{user_query}'")
     
-    # Enhanced navigation commands
+    # Handle navigation first
+    nav_response = handle_navigation(user_query)
+    if nav_response:
+        page = nav_response.split(':')[1]
+        return f"NAVIGATE_TO_{page.upper()}"
+    
     lower_query = user_query.lower()
-    if any(nav_word in lower_query for nav_word in ["go to", "take me to", "navigate to", "navigate"]):
-        if "safety" in lower_query: 
-            return "I'll take you to our comprehensive safety guidelines page now. NAVIGATE_TO_SAFETY"
-        if "dosage" in lower_query: 
-            return "I'll take you to our dosage calculator and guidelines page now. NAVIGATE_TO_DOSAGE"
-        if "contact" in lower_query: 
-            return "I'll take you to our contact information page now. NAVIGATE_TO_CONTACT"
-        if "home" in lower_query: 
-            return "I'll take you to our home page now. NAVIGATE_TO_HOME"
-
+    
+    # Get targeted links based on keywords
+    relevant_links = get_targeted_links(lower_query)
+    
     # Enhanced vector search
     query_embedding = genai.embed_content(model=embedding_model, content=user_query, task_type="retrieval_query")['embedding']
-    results = collection.query(query_embeddings=[query_embedding], n_results=6)
+    results = collection.query(query_embeddings=[query_embedding], n_results=3)  # Reduced to 3 for more focused results
     
     if not results['documents'] or not results['documents'][0]:
-        return generate_fallback_response(user_query)
+        return generate_fallback_response(user_query, relevant_links)
         
     retrieved_context = "\n\n".join(results['documents'][0])
-    print(f"Retrieved context length: {len(retrieved_context)}")
-
-    # Generate smart page suggestions
-    page_suggestions = get_smart_suggestions(user_query)
     
-    # SIMPLIFIED BUT EFFECTIVE PROMPT
+    # FOCUSED PROMPT - Only relevant information
     prompt = f"""
-You are MediCare Plus AI Assistant, a helpful healthcare chatbot.
-
-TASK: Answer the user's question using the provided CONTEXT. Always include relevant links.
+You are MediCare Plus AI Assistant. Answer the user's question concisely using ONLY the provided context.
 
 CONTEXT:
 {retrieved_context}
@@ -136,124 +223,43 @@ CONTEXT:
 USER QUESTION: {user_query}
 
 RESPONSE RULES:
-1. Give a helpful answer based on the CONTEXT
-2. Extract and include ALL links found in the context
-3. Format links as: <a href='filename.html'>Page Name</a> or <a href='full-url'>Link Text</a>
-4. Add these relevant page suggestions: {page_suggestions}
-5. Always end with "For personalized medical advice, consult your healthcare provider."
+1. Give a brief, focused answer (2-3 sentences max)
+2. Do NOT include any links in your response - links will be added separately
+3. Focus only on answering the specific question asked
+4. Be concise and direct
 
 ANSWER:
 """
 
     try:
         final_answer = chat_model.generate_content(prompt)
-        response = final_answer.text
+        response_content = final_answer.text
         
-        # Ensure links are included
-        if not any(indicator in response for indicator in ["<a href", "http", "safety.html", "dosage.html", "contact.html"]):
-            response += f"\n\n**Quick Links:**\n{page_suggestions}"
+        # Format with only relevant links
+        formatted_response = format_targeted_response(response_content, relevant_links, user_query)
+        formatted_response += "\n\nFor personalized medical advice, consult your healthcare provider."
         
-        print(f"Generated response length: {len(response)}")
-        return response
+        print(f"Generated targeted response length: {len(formatted_response)}")
+        return formatted_response
         
     except Exception as e:
         print(f"Error generating AI response: {e}")
-        return generate_fallback_response(user_query)
+        return generate_fallback_response(user_query, relevant_links)
 
-def get_smart_suggestions(user_query):
-    """Generate smart page suggestions based on query content"""
-    query_lower = user_query.lower()
-    suggestions = []
-    
-    # Safety-related
-    if any(word in query_lower for word in ['safety', 'safe', 'storage', 'administration', 'emergency', 'allergy', 'infection', 'risk', 'precaution', 'guideline']):
-        suggestions.append("• <a href='safety.html'>Safety Guidelines</a> - Comprehensive medication safety protocols")
-    
-    # Dosage-related  
-    if any(word in query_lower for word in ['dosage', 'dose', 'amount', 'how much', 'calculator', 'acetaminophen', 'ibuprofen', 'amoxicillin', 'medication']):
-        suggestions.append("• <a href='dosage.html'>Dosage Calculator</a> - Interactive medication dosing tools")
-    
-    # Contact-related
-    if any(word in query_lower for word in ['contact', 'phone', 'email', 'address', 'support', 'help', 'call', 'reach']):
-        suggestions.append("• <a href='contact.html'>Contact Us</a> - Get in touch with our support team")
-    
-    # Always include home page
-    suggestions.append("• <a href='index.html'>Home</a> - Main healthcare information hub")
-    
-    return "\n".join(suggestions)
-
-def generate_fallback_response(user_query):
-    """Generate a helpful fallback response when vector search fails"""
+def generate_fallback_response(user_query, relevant_links):
+    """Generate a focused fallback response"""
     query_lower = user_query.lower()
     
     if "safety" in query_lower:
-        return """
-**Medication Safety Guidelines:**
-
-Key safety practices include:
-- Store medications in cool, dry places away from sunlight
-- Keep medications in original containers with labels
-- Check expiration dates regularly
-- Never share prescription medications
-- Keep medications away from children and pets
-
-**Relevant Resources:**
-• <a href='safety.html'>Complete Safety Guidelines</a>
-• <a href='contact.html'>Contact Support</a>
-• <a href='https://www.fda.gov/drugs/information-consumers-and-patients-drugs/'>FDA Drug Safety</a>
-
-For personalized medical advice, consult your healthcare provider.
-"""
-    
+        content = "Key medication safety practices include proper storage, checking expiration dates, verifying patient identity, and maintaining sterile environments when necessary."
     elif any(word in query_lower for word in ['dosage', 'dose', 'amount']):
-        return """
-**Medication Dosage Information:**
-
-Proper dosing is crucial for medication effectiveness and safety:
-- Always follow prescriber instructions
-- Use appropriate measuring devices
-- Consider patient age, weight, and medical conditions
-- Never exceed recommended doses
-
-**Dosage Resources:**
-• <a href='dosage.html'>Dosage Calculator</a>
-• <a href='safety.html'>Safety Guidelines</a>
-• <a href='contact.html'>Contact Support</a>
-
-For personalized medical advice, consult your healthcare provider.
-"""
-    
+        content = "Proper medication dosing requires following prescriber instructions, using appropriate measuring devices, and considering patient factors like age and weight."
     elif any(word in query_lower for word in ['contact', 'phone', 'email', 'support']):
-        return """
-**Contact Information:**
-
-Get in touch with our healthcare support team:
-- Phone: +91 11 2345 6789
-- Email: info@medicareplus.com
-- Address: 123 Healthcare Street, New Delhi 110001
-
-**Quick Links:**
-• <a href='contact.html'>Full Contact Details</a>
-• <a href='index.html'>Home Page</a>
-• <a href='safety.html'>Safety Guidelines</a>
-
-For personalized medical advice, consult your healthcare provider.
-"""
-    
+        content = "Our healthcare support team is available to assist you with questions and provide guidance on medication safety and dosing."
     else:
-        return """
-I'm here to help with healthcare questions, medication safety, dosage calculations, and more.
-
-**Popular Resources:**
-• <a href='safety.html'>Safety Guidelines</a> - Medication safety protocols
-• <a href='dosage.html'>Dosage Calculator</a> - Interactive dosing tools  
-• <a href='contact.html'>Contact Us</a> - Support and information
-• <a href='index.html'>Home</a> - Main healthcare hub
-
-How can I assist you with your healthcare needs today?
-
-For personalized medical advice, consult your healthcare provider.
-"""
+        content = "I'm here to help with healthcare questions, medication safety, and dosage information."
+    
+    return format_targeted_response(content, relevant_links, user_query) + "\n\nFor personalized medical advice, consult your healthcare provider."
 
 # --- API Endpoints ---
 @app.route('/chat', methods=['POST'])
@@ -263,6 +269,15 @@ def chat():
         return jsonify({"error": "No message provided"}), 400
     
     bot_response = get_chatbot_response(user_message)
+    
+    # Handle navigation responses
+    if bot_response.startswith("NAVIGATE_TO_"):
+        page = bot_response.split("NAVIGATE_TO_")[1].lower()
+        return jsonify({
+            "response": f"Taking you to the {page} page...",
+            "navigate": f"https://healthcare-chatbot-website.netlify.app/{page}.html" if page != "home" else "https://healthcare-chatbot-website.netlify.app/index.html"
+        })
+    
     return jsonify({"response": bot_response})
 
 @app.route('/health', methods=['GET'])
