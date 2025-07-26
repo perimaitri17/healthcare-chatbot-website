@@ -564,28 +564,51 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function callGeminiAPI(userMessage) {
-        const backendUrl = 'https://healthcare-chatbot-website-354743195635.asia-south2.run.app/chat';
-        try {
-            const response = await fetch(backendUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                mode: 'cors',
-                body: JSON.stringify({ message: userMessage })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            return data.response || "Sorry, I didn't receive a proper response from the server.";
-
-        } catch (error) {
-            console.error('Error calling API:', error);
-            throw error;
+  async function callGeminiAPI(userMessage) {
+    const backendUrl = 'https://healthcare-chatbot-website-354743195635.asia-south2.run.app/chat';
+    try {
+        const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            mode: 'cors',
+            body: JSON.stringify({ message: userMessage })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Handle navigation if present
+        if (data.navigate) {
+            // Show the response message first
+            const responseText = data.response || "Navigating...";
+            
+            // Add a small delay to let user see the message, then navigate
+            setTimeout(() => {
+                window.location.href = data.navigate;
+            }, 1500); // 1.5 second delay
+            
+            return responseText;
+        }
+        
+        // Return regular response
+        return data.response || "Sorry, I didn't receive a proper response from the server.";
+        
+    } catch (error) {
+        console.error('Error calling API:', error);
+        
+        // Return user-friendly error message
+        if (error.message.includes('Failed to fetch')) {
+            return "Sorry, I'm having trouble connecting to the server. Please check your internet connection and try again.";
+        } else if (error.message.includes('HTTP error')) {
+            return "Sorry, the server is experiencing issues. Please try again in a moment.";
+        } else {
+            return "Sorry, something went wrong. Please try again.";
         }
     }
+}
 
     // ENHANCED addMessage function with better link processing
     function addMessage(message, sender, saveToHistory = true) {
